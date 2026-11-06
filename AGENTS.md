@@ -198,6 +198,16 @@ The repo must not drown in documentation. These rules are about keeping it small
   reading the corpus, not from the upstream README.
 - **Conventional Commits**: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`.
   One logical change per commit. The body says *why*.
+- **Commits are the changelog, and they are short.** Subject ≤ 72 chars. Body: at most
+  3 lines of plain fact — what changed and why. No ceremony, no restating the diff.
+- **A direction change is committed as a direction change**, in the same commit as the
+  code that follows it: state what was decided and what it replaces (e.g. `feat: drop
+  cross-encoder reranker — RRF only, ADR-0006`). If the plan moved, say so there; chat
+  is not a record.
+- **Read the log before you build.** Every agent that pulls, rebases or notices new
+  commits runs `git log --oneline -20` and reads those messages first — they are how a
+  changed plan or a moved file reaches you. A commit that changes direction without
+  saying so is a defect.
 - **Scope discipline.** Do what was asked. A drive-by refactor in an unrelated file is
   reverted even if it is an improvement — it makes review impossible. Note it instead.
 - **Report failures faithfully.** If tests fail, show the output. If a step was
