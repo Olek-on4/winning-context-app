@@ -70,10 +70,17 @@ def extract_claims() -> None:
 
 
 def index_corpus() -> None:
-    """`... cli index`: chunk the corpus and fill the BM25 index (no model needed)."""
+    """`... cli index`: chunk the corpus; embed too when a model answers."""
+    from retrieval.hybrid import _embed
+
     driver = _driver()
     apply_schema(driver)
-    print(json.dumps({"chunks": index_chunks(driver, _corpus_root())}))
+    try:
+        vector = _embed("probe")
+    except Exception:  # no model on this machine is a supported state, not an error
+        vector = None
+    chunks = index_chunks(driver, _corpus_root(), embed=_embed if vector else None)
+    print(json.dumps({"chunks": chunks, "embedded": bool(vector)}))
 
 
 def load_claims(path: str) -> None:
