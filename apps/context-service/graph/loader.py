@@ -27,7 +27,10 @@ SET cl.predicate = c.predicate,
     cl.confidence = c.confidence,
     cl.valid_from = c.valid_from,
     cl.valid_to = c.valid_to,
-    cl.observed_at = c.observed_at
+    cl.observed_at = c.observed_at,
+    cl.extractor = c.extractor,
+    cl.extractor_version = c.extractor_version,
+    cl.source_type = c.source_type
 WITH cl, c
 MERGE (s:Entity {key: c.subject})
 MERGE (cl)-[:ABOUT]->(s)
@@ -65,6 +68,9 @@ def load(driver: Driver, claims: list[ClaimRecord]) -> int:
             "observed_at": r.claim.observed_at.isoformat() if r.claim.observed_at else None,
             "subject": r.claim.subject.key,
             "object": r.claim.object.key if hasattr(r.claim.object, "key") else str(r.claim.object),
+            "extractor": r.claim.extractor,
+            "extractor_version": r.claim.extractor_version,
+            "source_type": str(r.claim.source_type),
             "spans": [s.model_dump() for s in r.claim.evidence],
         }
         for claim_id, r in resolved.items()
