@@ -112,3 +112,34 @@ def test_age_only_counts_when_something_newer_contradicts():
     assert result[old_undisputed.claim_id].score == 0.72          # 0.8 × 0.9, no decay
     assert result[old_contradicted.claim_id].score < 0.72          # decayed by ~880 days
     assert result[old_contradicted.claim_id].score >= 0.72 * 0.25  # floored
+
+
+def test_a_diagram_alone_is_a_lead_not_a_fact():
+    """Issue 9: diagram claims are capped at authority 0.40 — alone they stay DISPUTED."""
+    from models.claim import SourceType
+
+    diagram_only = claim(
+        object="Redis", observed_at=date(2026, 1, 15), valid_from=date(2026, 1, 1),
+        confidence=0.9, authority=0.40, source_type=SourceType.DIAGRAM,
+    )
+
+    result = resolve([diagram_only])
+
+    assert result[diagram_only.claim_id].status is Status.DISPUTED
+
+
+def test_a_proposal_realised_by_a_later_fact_stops_being_a_proposal():
+    """Issue 9: `PROPOSED` is a state, not a verdict — a realised proposal is VALID."""
+    proposal = claim(
+        object="SSO", predicate="AUTHENTICATES_VIA", modality=Modality.PROPOSAL,
+        observed_at=date(2026, 3, 1), valid_from=date(2026, 3, 1), confidence=0.9, authority=0.8,
+    )
+    shipped = claim(
+        object="SSO", predicate="AUTHENTICATES_VIA", modality=Modality.FACT,
+        observed_at=date(2026, 9, 1), valid_from=date(2026, 9, 1), confidence=0.9, authority=0.8,
+    )
+
+    result = resolve([proposal, shipped])
+
+    assert result[shipped.claim_id].status is Status.VALID
+    assert result[proposal.claim_id].status is Status.VALID

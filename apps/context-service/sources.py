@@ -17,6 +17,8 @@ from pathlib import Path
 MAX_LINE_BYTES = 1 << 20  # a "line" longer than this is a binary blob; refuse it
 _TEXT_SUFFIXES = {".md", ".txt", ".sql", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".ts", ".tsx",
                   ".js", ".mjs", ".py", ".java", ".graphql", ".csv"}
+# Extensionless files that are still text and carry facts.
+_TEXT_NAMES = {"CODEOWNERS", "Dockerfile", "Makefile", "LICENSE", "Procfile", "Vagrantfile"}
 _SKIP_DIRS = {".git", "node_modules", ".venv", "__pycache__", "dist", "build", ".next"}
 
 
@@ -52,7 +54,9 @@ def discover(paths: Iterable[Path]) -> list[Root]:
 def iter_files(root: Root) -> Iterator[tuple[Path, str]]:
     """Yield (relative path, streaming sha256). Sorted for determinism; no file is read whole."""
     for path in sorted(root.path.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in _TEXT_SUFFIXES:
+        if not path.is_file():
+            continue
+        if path.suffix.lower() not in _TEXT_SUFFIXES and path.name not in _TEXT_NAMES:
             continue
         if _SKIP_DIRS & set(path.relative_to(root.path).parts):
             continue

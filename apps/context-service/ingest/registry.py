@@ -14,6 +14,7 @@ from datetime import date
 from pathlib import Path
 from typing import Protocol
 
+from ingest.gates import dated_by_reference
 from models.claim import ClaimRecord, DocStatus, EntityRef, Modality, Polarity, SourceType, Span
 from sources import Root
 
@@ -114,7 +115,8 @@ class SqlAlter:
 
     def extract(self, root: Root, path: Path, digest: str) -> Iterable[ClaimRecord]:
         text = path.read_text(encoding="utf-8", errors="replace")  # SQL files are small; spans still stream
-        observed = _observed(root, path)
+        # The release that ships a migration is a better date than the commit that added it.
+        observed = dated_by_reference(root, path.name) or _observed(root, path)
         common = dict(
             observed_at=observed, valid_from=observed, observed_precision="day",
             confidence=1.0, authority=1.0, source_type=SourceType.SCHEMA, extractor=self.name,
@@ -196,7 +198,65 @@ class MarkdownStatus:
                 )
 
 
-PIPELINES: list[Pipeline] = [SqlAlter(), JsonConfigMap(), MarkdownStatus()]
+class DeployConfig:
+    """compose services, manifest dependencies and CODEOWNERS — all deterministic."""
+
+    name = "config.deploy"
+    SERVICE = re.compile(r"^  ([a-z0-9][\w-]*):\s*$")
+    DEPENDS = re.compile(r"^\s+-\s+([\w-]+)\s*$")
+    OWNER = re.compile(r"^\s*/?([\w./-]+?)/?\s+@([\w./-]+)\s*$")
+    DEP_NAME = re.compile(r'"(@?[\w./-]+)"\s*:\s*"[~^>=<]*[\d.]')
+
+    def matches(self, path: Path) -> bool:
+        return path.name in {"compose.yaml", "compose.yml", "CODEOWNERS"} or path.name == "package.json"
+
+    def extract(self, root: Root, path: Path, digest: str) -> Iterable[ClaimRecord]:
+        observed = _observed(root, path.relative_to(root.path))
+        if observed is None:
+            return
+        common = dict(observed_at=observed, valid_from=observed, confidence=1.0,
+                      authority=1.0, source_type=SourceType.CONFIG, extractor=self.name)
+        if path.name == "package.json":
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                match = self.DEP_NAME.search(line)
+                if match:
+                    yield _claim(root, path, number, digest,
+                                 subject=EntityRef(kind="Package", key=path.parent.name or "root"),
+                                 predicate="DEPENDS_ON", object=match.group(1), **common)
+            return
+        if path.name == "CODEOWNERS":
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                match = self.OWNER.match(line)
+                if match:
+                    yield _claim(root, path, number, digest,
+                                 subject=EntityRef(kind="Component", key=match.group(1)),
+                                 predicate="OWNS", object=match.group(2), **common)
+            return
+        # compose: service names are the facts; depends_on arrives as DEPENDS_ON edges
+        current = None
+        in_depends = False
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            service = self.SERVICE.match(line)
+            if service:
+                current, in_depends = service.group(1), False
+                yield _claim(root, path, number, digest,
+                             subject=EntityRef(kind="Service", key=current),
+                             predicate="DEFINED_IN", object=root.pointer(path.relative_to(root.path)), **common)
+                continue
+            if current and line.strip().startswith("depends_on"):
+                in_depends = True
+                continue
+            if in_depends:
+                dep = self.DEPENDS.match(line)
+                if dep:
+                    yield _claim(root, path, number, digest,
+                                 subject=EntityRef(kind="Service", key=current),
+                                 predicate="DEPENDS_ON", object=dep.group(1), **common)
+                elif line.strip() and not line.startswith(" " * 6):
+                    in_depends = False
+
+
+PIPELINES: list[Pipeline] = [SqlAlter(), JsonConfigMap(), MarkdownStatus(), DeployConfig()]
 
 
 def register(pipeline: Pipeline) -> None:

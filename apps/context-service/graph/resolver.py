@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from enum import StrEnum
 
-from models.claim import ClaimRecord, Modality
+from models.claim import ClaimRecord, Modality, SourceType
 
 
 class Status(StrEnum):
@@ -133,12 +133,30 @@ def resolve(claims: list[ClaimRecord], as_of: date | None = None) -> dict[str, R
                 res.valid_to = superseded_at or claim.valid_to
 
         for claim in intents:
-            out[claim.claim_id].status = Status.PROPOSED if claim.modality is Modality.PROPOSAL else Status.PLANNED
+            res = out[claim.claim_id]
+            if claim.modality is Modality.PROPOSAL:
+                # A proposal that a later factual claim realises is no longer a proposal.
+                realised = any(
+                    c.polarity is claim.polarity
+                    and c.valid_from
+                    and claim.valid_from
+                    and c.valid_from > claim.valid_from
+                    and c.modality not in INTENT_MODALITIES
+                    for c in factual
+                )
+                res.status = Status.VALID if realised else Status.PROPOSED
+            else:
+                res.status = Status.PLANNED
 
     # A closed validity window is the corpus saying "this stopped being true", with or
     # without a rival claim (path rules such as api-specs/history/ produce these).
     for res in out.values():
         if now and res.valid_to and res.valid_to < now and res.status is Status.VALID:
             res.status = Status.DEPRECATED
+
+    # A diagram is never the sole authority: uncorroborated, it stays a lead.
+    for res in out.values():
+        if res.status is Status.VALID and res.claim.source_type is SourceType.DIAGRAM and not res.corroborated_by:
+            res.status = Status.DISPUTED
 
     return out

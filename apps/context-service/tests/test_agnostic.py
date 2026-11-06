@@ -113,3 +113,33 @@ def test_reindex_drops_chunks_whose_file_vanished(tmp_path):
     assert any(path.endswith("keep.md") for path in sweeps[0]["keep"])
     assert not any(path.endswith("gone.md") for path in sweeps[0]["keep"])
     assert sweep(driver, root, set()) == 0  # counters surface, nothing raised
+
+
+def test_deploy_config_pipeline_reads_any_repo_layout(tmp_path):
+    """Issue 4: compose, manifests and CODEOWNERS are facts, not Northstar specifics."""
+    import subprocess
+
+    from ingest.registry import extract
+    from sources import discover
+
+    (tmp_path / "compose.yaml").write_text(
+        "services:\n  api:\n    image: x\n    depends_on:\n      - db\n  db:\n    image: y\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "package.json").write_text('{"dependencies": {"left-pad": "^1.0.0"}}', encoding="utf-8")
+    (tmp_path / ".github").mkdir()
+    (tmp_path / ".github" / "CODEOWNERS").write_text("/api/ @team/api\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"],
+        cwd=tmp_path, check=True,
+    )
+
+    claims = extract(discover([tmp_path])[0])
+    triples = {(c.subject.key, c.predicate, c.object) for c in claims}
+
+    assert ("api", "DEPENDS_ON", "db") in triples
+    assert any(pred == "DEPENDS_ON" and obj == "left-pad" for _, pred, obj in triples)
+    assert any(pred == "OWNS" for _, pred, _ in triples)
+    assert all(c.observed_at is not None for c in claims)
