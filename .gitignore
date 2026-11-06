@@ -116,5 +116,4 @@ docker-data/
 tmp/
 scratch/
 apps/context-service/.venv/
-apps/context-service/uv.lock
 __pycache__/
