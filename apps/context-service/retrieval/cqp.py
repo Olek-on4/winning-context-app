@@ -134,7 +134,7 @@ def validate_plan(plan: dict) -> CQP:
 # without a template branch; max_hops binds as a cap even when the star shape needs one.
 
 _FILTER = """MATCH (c:Claim)-[:ABOUT]->(e:Entity)
-WHERE e.key IN $anchor_keys
+WHERE any(a IN $anchor_keys WHERE toLower(e.key) CONTAINS toLower(a))
   AND c.status IN $status_in
   AND c.confidence >= $min_confidence
   AND ($as_of IS NULL OR ((c.valid_from IS NULL OR c.valid_from <= $as_of)
@@ -216,12 +216,12 @@ WITH c, e, reduce(m = '', x IN later_ids | CASE WHEN m = '' OR x < m THEN x ELSE
     ),
     Intent.RISKS: (
         """MATCH (c:Claim)-[:ABOUT]->(e:Entity)
-WHERE (e.key IN $anchor_keys OR c.predicate IN $risk_predicates)
+WHERE (any(a IN $anchor_keys WHERE toLower(e.key) CONTAINS toLower(a)) OR c.predicate IN $risk_predicates)
   AND c.status IN $status_in
   AND c.confidence >= $min_confidence
   AND ($as_of IS NULL OR ((c.valid_from IS NULL OR c.valid_from <= $as_of)
        AND (c.valid_to IS NULL OR c.valid_to > $as_of)))
-WITH c, e, CASE WHEN e.key IN $anchor_keys THEN 1 ELSE 0 END AS anchored
+WITH c, e, CASE WHEN any(a IN $anchor_keys WHERE toLower(e.key) CONTAINS toLower(a)) THEN 1 ELSE 0 END AS anchored
 """
         + _citations("c, e, anchored, ")
         + "\n"

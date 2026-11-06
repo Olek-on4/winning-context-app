@@ -44,8 +44,14 @@ def score(claim: ClaimRecord) -> float:
     return claim.authority * claim.confidence
 
 
-def resolve(claims: list[ClaimRecord]) -> dict[str, Resolved]:
-    """Group by triple, then rank. Contradiction never deletes: losers stay, labelled."""
+def resolve(claims: list[ClaimRecord], as_of: date | None = None) -> dict[str, Resolved]:
+    """Group by triple, then rank. Contradiction never deletes: losers stay, labelled.
+
+    `as_of` defaults to the newest observation in the batch — the corpus snapshot — so a
+    fact whose validity window closed before the snapshot is DEPRECATED without anyone
+    having to assert a negation.
+    """
+    now = as_of or max((c.observed_at for c in claims if c.observed_at), default=None)
     groups: dict[tuple[str, str, str], list[ClaimRecord]] = {}
     for claim in claims:
         groups.setdefault(claim.triple, []).append(claim)
@@ -105,5 +111,11 @@ def resolve(claims: list[ClaimRecord]) -> dict[str, Resolved]:
 
         for claim in intents:
             out[claim.claim_id].status = Status.PROPOSED if claim.modality is Modality.PROPOSAL else Status.PLANNED
+
+    # A closed validity window is the corpus saying "this stopped being true", with or
+    # without a rival claim (path rules such as api-specs/history/ produce these).
+    for res in out.values():
+        if now and res.valid_to and res.valid_to < now and res.status is Status.VALID:
+            res.status = Status.DEPRECATED
 
     return out

@@ -18,6 +18,8 @@ from retrieval.cqp import Anchor, CQP, Intent, TimeFilter, Traverse, validate_pl
 DEFAULT_HOST = "http://localhost:11434"
 DEFAULT_MODEL = "llama3.2"
 
+# All five states a claim can hold. The answer labels each one, so hiding PROPOSED or
+# DISPUTED would only make the service look more certain than it is.
 _HISTORY_STATUSES = ["VALID", "DEPRECATED", "PLANNED", "PROPOSED", "DISPUTED"]
 
 _PREDICATE_NAMES = {
@@ -37,6 +39,8 @@ _PREDICATE_PHRASES = {
     "supersedes": "SUPERSEDES",
     "implemented by": "IMPLEMENTS",
     "prohibits": "PROHIBITS",
+    "exposes": "EXPOSES",
+    "expose": "EXPOSES",
 }
 
 _IDENTIFIERS = (
@@ -170,7 +174,7 @@ def _time_for(intent: Intent, as_of: str | None) -> TimeFilter:
         Intent.TIMELINE: _HISTORY_STATUSES,
         Intent.CONFLICTS: ["DISPUTED"],
         Intent.RISKS: ["VALID", "DISPUTED"],
-    }.get(intent, ["VALID"])
+    }.get(intent, _HISTORY_STATUSES)  # every known state; the row carries its label
     return TimeFilter(
         as_of=as_of,
         status_in=list(statuses),
