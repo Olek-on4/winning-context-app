@@ -71,8 +71,24 @@ def _driver():
     )
 
 
+def _served_roots() -> list[Root]:
+    """Roots the *server* may read citations from — `SOURCES` (colon-separated) or the corpus.
+
+    Extraction can point at any directory; unless serving knows the same list, every
+    citation from an extra root fails verification at query time.
+    """
+    env = os.getenv("SOURCES")
+    paths = [Path(part).expanduser() for part in env.split(os.pathsep)] if env else [_corpus_root()]
+    roots = discover(paths)
+    if not roots:
+        raise SystemExit(f"SOURCES names no existing directory: {env}")
+    return roots
+
+
 def _service() -> ContextService:
-    return ContextService(_driver(), _corpus_root())
+    from sources import SpanStore
+
+    return ContextService(_driver(), SpanStore(_served_roots()))
 
 
 def serve() -> None:

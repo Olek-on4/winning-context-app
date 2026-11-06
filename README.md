@@ -80,6 +80,19 @@ uv run python -m cli load /path/to/claims.jsonl        # EXTRACTED_PATH controls
 uv run python -m cli index --source /path/to/your/repo --source ../../vendor/att-hackathon-task
 ```
 
+The **server** must be told the same roots, or citations from the new tree fail
+verification at query time. `SOURCES` is colon-separated and applies to `serve` and `mcp`:
+
+```sh
+SOURCES=/path/to/your/repo:$PWD/../../vendor/att-hackathon-task \
+  uv run python -m cli serve
+```
+
+Worked example, measured: a three-file directory (`conf/ports.json`, `schema/003-invoices.sql`,
+`notes/billing.md`, git-initialised) added as a second root produced 28 claims —
+`billing-api LISTENS_ON 9100`, `invoices NOT HAS_COLUMN state` / `ASSERTS invoice_status` —
+and both answered over HTTP with citations that resolve through `/v1/span`.
+
 What happens automatically: every text file is chunked and embedded for search; `.sql`
 `ALTER TABLE` statements become `HAS_COLUMN` claims (renames emit a negation);
 `compose.yaml`, `package.json` and `CODEOWNERS` become `DEFINED_IN` / `DEPENDS_ON` /
