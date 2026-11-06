@@ -2,7 +2,7 @@ APP := apps/context-service
 COMPOSE := docker compose -f infra/neo4j/compose.yaml
 CLAIMS := ../../data/fixtures/claims-sample.jsonl ../../data/local/claims-extracted.jsonl
 
-.PHONY: up down extract index load serve mcp demo test lint fmt rehearse check install-hooks
+.PHONY: up down extract index load serve mcp demo test lint fmt rehearse check install-hooks gpu
 
 up: ## start neo4j
 	$(COMPOSE) up -d
@@ -41,6 +41,10 @@ rehearse:
 	cd $(APP) && uv run python ../../scripts/rehearse.py
 
 check: lint test ## the commit gate
+
+gpu: ## is the model actually on the card?
+	@nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv,noheader 2>/dev/null || echo "no driver loaded"
+	@ollama ps 2>/dev/null || echo "ollama not installed"
 
 install-hooks: ## point git at .githooks
 	bash scripts/install-hooks.sh

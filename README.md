@@ -27,6 +27,7 @@ plan compiled to parameterised Cypher — the model never writes a query.
 - [docs/04-temporal-model.md](docs/04-temporal-model.md) — how validity is decided
 - [docs/08-delivery-plan.md](docs/08-delivery-plan.md) — four developers, five hours
 - [docs/10-workstreams.md](docs/10-workstreams.md) — who builds what
+- [docs/local-model.md](docs/local-model.md) — running the embedding model on the GPU
 - [docs/plan-review.html](docs/plan-review.html) — visual review of the plan: pillars, mechanics, findings
 - [docs/adr/](docs/adr/) — decisions and their rejected alternatives
 
