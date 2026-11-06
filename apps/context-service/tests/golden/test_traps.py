@@ -34,7 +34,7 @@ def service():
     from retrieval.service import ContextService
 
     try:
-        driver = connect("bolt://localhost:7687", "neo4j", "northstar")
+        driver = connect("bolt://localhost:7687", "neo4j", "etyt-context")
         driver.verify_connectivity()
     except Exception:  # any connection failure means "skip"
         pytest.skip("Neo4j not reachable")

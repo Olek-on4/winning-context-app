@@ -1,7 +1,7 @@
 """Chunk ids must be unique per root, or the loader's MERGE overwrites real text.
 
 A long body under one heading flushes repeatedly; per-body indices restarted at zero and
-collapsed the windows onto one id (1119 windows -> 685 ids on the Northstar corpus).
+collapsed the windows onto one id (1119 windows -> 685 ids on the corpus).
 """
 
 from __future__ import annotations

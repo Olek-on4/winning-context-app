@@ -79,7 +79,7 @@ make rehearse     # 12 checks; the index line must say embedded=true
 Then confirm the vector index is populated, not just the text one:
 
 ```sh
-docker exec northstar-neo4j cypher-shell -u neo4j -p northstar \
+docker exec etyt-neo4j cypher-shell -u neo4j -p etyt-context \
   "CALL db.index.vector.queryNodes('chunk_embedding', 3, \$v) YIELD node, score
    RETURN node.id AS id, score" --param 'v=[0.0,…768 values…]'
 ```

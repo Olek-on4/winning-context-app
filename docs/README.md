@@ -1,4 +1,4 @@
-# Northstar Context Service — design documentation
+# Ety&T — design documentation
 
 Design record for an evidence-backed, time-aware Context Service over the
 `vendor/att-hackathon-task` corpus.

@@ -23,7 +23,7 @@ class PlanBody(BaseModel):
 
 def create_app(service: ContextBackend) -> FastAPI:
     """`service` is any ContextBackend: the routes never touch the corpus themselves."""
-    app = FastAPI(title="Northstar Context Service", version="1.0")
+    app = FastAPI(title="Ety&T — Context Service", version="1.0")
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:

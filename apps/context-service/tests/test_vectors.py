@@ -18,7 +18,7 @@ def driver():
     from graph.loader import connect
 
     try:
-        connection = connect("bolt://localhost:7687", "neo4j", "northstar")
+        connection = connect("bolt://localhost:7687", "neo4j", "etyt-context")
         connection.verify_connectivity()
     except Exception:  # any connection failure means "skip"
         pytest.skip("Neo4j not reachable")
@@ -27,7 +27,13 @@ def driver():
 
 
 def test_every_chunk_that_exists_has_a_vector(driver):
-    """Invariant: indexing either embeds every chunk or reports embedded=false."""
+    """Strict invariant: a chunk exists only with its vector.
+
+    The first version of the index wrote chunks and lost every vector while the suite
+    stayed green. A lexical-only deployment must say so explicitly with
+    `ALLOW_LEXICAL_INDEX=1` (the container smoke job sets it); anything in between —
+    some chunks embedded, some not — is always a failure.
+    """
     with driver.session() as session:
         total = session.run("MATCH (c:Chunk) RETURN count(c) AS n").single()["n"]
         embedded = session.run(
@@ -35,7 +41,9 @@ def test_every_chunk_that_exists_has_a_vector(driver):
         ).single()["n"]
     if total == 0:
         pytest.skip("index is empty: run `python -m cli index`")
-    assert embedded == total, f"{total - embedded} chunks have no vector"
+    if embedded == 0 and __import__("os").environ.get("ALLOW_LEXICAL_INDEX") == "1":
+        pytest.skip("lexical-only deployment: ALLOW_LEXICAL_INDEX=1")
+    assert embedded == total, f"{total - embedded} of {total} chunks have no vector"
 
 
 def test_a_paraphrase_reaches_the_vector_channel(driver):

@@ -1,6 +1,6 @@
-# Et&T - Etymology & Translation
+# Ety&T — Etymology & Translation
 
-A Context Service over various types of engineering data with AT&T "Northstar Equipment" test dataset.
+A Context Service over various types of engineering data with the AT&T "Northstar Equipment" corpus (the data, not this app).
 It ingests the corpus, extracts time-stamped claims with evidence, resolves contradictions, and answers
 context queries with citations back to source files. Queries are excuted through multi-layer index
 and returns relevant structured data.

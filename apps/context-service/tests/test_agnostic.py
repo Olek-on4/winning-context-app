@@ -1,6 +1,6 @@
 """A corpus nobody wrote a pipeline for: extraction must be layout-blind.
 
-The three files below use names and directories that appear nowhere in the Northstar
+The three files below use names and directories that appear nowhere in the
 corpus, so passing here means the pipelines key off content, not off a known tree.
 """
 

@@ -124,7 +124,7 @@ untrusted user input** ([sources](research/sources.md#prompt-injection)).
 // .mcp.json
 {
   "mcpServers": {
-    "northstar-context": {
+    "etyt-context": {
       "command": "uv",
       "args": ["run", "python", "-m", "cli", "mcp"],
       "env": {"NEO4J_URI": "bolt://localhost:7687"}

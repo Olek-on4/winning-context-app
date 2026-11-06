@@ -1,7 +1,7 @@
 [project]
 name = "context-service"
 version = "0.1.0"
-description = "Evidence-backed, time-aware context service over the Northstar corpus"
+description = "Ety&T — evidence-backed, time-aware context service"
 requires-python = ">=3.12"
 dependencies = [
   "pydantic>=2.9",

@@ -53,7 +53,7 @@ def main() -> int:
         return 2
 
     # 1. clean graph, so this is a cold start and not a lucky cache
-    run("python", "-c", "from graph.loader import connect;d=connect('bolt://localhost:7687','neo4j','northstar');s=d.session();s.run('MATCH (n) DETACH DELETE n');d.close()")
+    run("python", "-c", "from graph.loader import connect;d=connect('bolt://localhost:7687','neo4j','etyt-context');s=d.session();s.run('MATCH (n) DETACH DELETE n');d.close()")
 
     # 2. the three bring-up commands from docs/demo.md
     extract = json.loads(run("python", "-m", "cli", "extract"))

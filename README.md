@@ -1,4 +1,4 @@
-# winning-context-app
+# Ety&T — Etymology & Translation
 
 Solution for the AT&T Context Service hackathon. An evidence-backed, time-aware
 Context Service over the [Northstar Equipment](https://github.com/arkik7/att-hackathon-task)

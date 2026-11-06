@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 from graph.chunks import index as index_chunks
@@ -66,7 +67,7 @@ def _driver():
     return connect(
         os.getenv("NEO4J_URI", "bolt://localhost:7687"),
         os.getenv("NEO4J_USER", "neo4j"),
-        os.getenv("NEO4J_PASSWORD", "northstar"),
+        os.getenv("NEO4J_PASSWORD", "etyt-context"),
     )
 
 

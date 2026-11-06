@@ -85,7 +85,7 @@ def resolve_span(service: ContextBackend, path: str, start: int, end: int) -> st
 
 def build_server(service: ContextBackend) -> MCPServer:
     """Bind the tools to one backend instance; the caller owns its lifetime."""
-    server = MCPServer(name="northstar-context", version="1.0")
+    server = MCPServer(name="etyt-context", version="1.0")
 
     @server.tool(name="context_search")
     def context_search_tool(
