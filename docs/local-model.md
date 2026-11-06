@@ -97,9 +97,12 @@ the same question usually returns nothing.
 | Failure | `embedded:false`, BM25 still answers — the demo never depends on the model |
 | Token cost | zero; the model is local |
 
-The planner uses `OLLAMA_MODEL` (default `llama3.2`) when it is reachable and falls back
-to the deterministic keyword planner otherwise. Both paths are tested; the fallback is
-what runs today.
+The planner is deterministic first: the keyword plan covers any question that names an
+identifier, service, table or endpoint, and answers in ~10 ms. `OLLAMA_MODEL` (default
+`llama3.2`) is called only when the question names nothing the keyword plan can anchor —
+measured on 2026-11-06, a model-first planner lost traps G3 and G7 and invented a
+`time.as_of` of `2022-01-01` for a question with no date, which silently filtered every
+current claim out. `plan(..., model=False)` skips even that fallback.
 
 ## 6. Known limits, said out loud
 
@@ -108,5 +111,8 @@ what runs today.
   `schema.cypher` edit, not a config toggle.
 - The model never sees retrieved text, only the user's question and the ontology digest —
   the planner prompt is deliberately blind to corpus content (AGENTS invariant 3).
-- Nothing on the GPU path is measured on this machine yet: the driver is absent, so the
-  latency numbers in `docs/09-evaluation.md` remain local-CPU/BM25 numbers.
+- Measured on this machine (RTX 3060 Laptop, 6 GB, 2026-11-06, both models resident):
+  `cli index` embeds 1119 chunks in 44 s; a warm planner call is 0.67 s; a cold load of
+  `llama3.2` is 34 s, longer than the 10 s planner timeout, which is why the planner sends
+  `keep_alive` and why the model is not on the default path. `/v1/query` end to end is
+  10 ms.

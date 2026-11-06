@@ -54,18 +54,27 @@ _IDENTIFIERS = (
 )
 
 
-def plan(question: str, intent: str | None = None) -> CQP:
-    """Never raises: model, then keywords, then a text-anchored LOOKUP."""
+def plan(question: str, intent: str | None = None, model: bool = True) -> CQP:
+    """Never raises. Deterministic first (ADR-0005): the keyword plan covers every
+    question that names an identifier, service, table or endpoint. The model is the
+    fallback for questions that name nothing, and never overrides a deterministic plan.
+
+    `model=False` disables even that fallback.
+    """
     result: CQP | None = None
     try:
-        result = _from_model(question)
+        result = _keywords(question, intent)
     except Exception:
         result = None
-    if result is None:
+    if model and (result is None or _unanchored(result)):
         try:
-            result = _keywords(question, intent)
+            modelled = _from_model(question)
         except Exception:
-            return _safe(question)
+            modelled = None
+        if modelled is not None:
+            result = modelled
+    if result is None:
+        return _safe(question)
     if intent is not None:
         try:
             forced = Intent(str(intent).strip().upper())
@@ -74,6 +83,12 @@ def plan(question: str, intent: str | None = None) -> CQP:
             )
         except Exception:
             pass
+    if result is not None and result.time.as_of and not _TEMPORAL_HINT.search(question):
+        # The model invents a point in time for questions that carry none. Honouring it
+        # silently filters every current claim out and reads as "no evidence".
+        result = result.model_copy(
+            update={"time": result.time.model_copy(update={"as_of": None})}
+        )
     return result
 
 
@@ -81,12 +96,16 @@ def _from_model(question: str) -> CQP:
     host = os.environ.get("OLLAMA_HOST", DEFAULT_HOST).rstrip("/")
     model = os.environ.get("OLLAMA_MODEL", DEFAULT_MODEL)
     timeout = float(os.environ.get("OLLAMA_TIMEOUT", "10"))
+    keep_alive = os.environ.get("OLLAMA_KEEP_ALIVE", "30m")
     payload = {
         "model": model,
         "prompt": _prompt(question),
         "stream": False,
         "format": CQP.model_json_schema(),
-        "options": {"temperature": 0},
+        # keep_alive keeps the 2.6 GB planner resident: a cold load on the 3060 takes
+        # 34 s, which is longer than this timeout, so every cold query used to fall back.
+        "keep_alive": keep_alive,
+        "options": {"temperature": 0, "num_predict": 256},
     }
     response = httpx.post(f"{host}/api/generate", json=payload, timeout=timeout)
     response.raise_for_status()
@@ -144,6 +163,11 @@ def _keywords(question: str, intent: str | None = None) -> CQP:
     )
 
 
+def _unanchored(cqp: CQP) -> bool:
+    """True when the plan names nothing: only then is a model plan worth the round trip."""
+    return not any(anchor.key for anchor in cqp.anchors)
+
+
 def _forced_intent(intent: str | None) -> Intent | None:
     if intent is None:
         return None
@@ -180,6 +204,15 @@ def _time_for(intent: Intent, as_of: str | None) -> TimeFilter:
         status_in=list(statuses),
         include_superseded_chain=intent in {Intent.STATE_OF, Intent.RELATIONSHIP},
     )
+
+
+# A question only constrains time if it names one; otherwise a model-provided as_of is
+# a guess that hides the present.
+_TEMPORAL_HINT = re.compile(
+    r"\b(\d{4}-\d{2}-\d{2}|\d{4}|january|february|march|april|may|june|july|august"
+    r"|september|october|november|december)\b",
+    re.IGNORECASE,
+)
 
 
 def _as_of(question: str) -> str | None:
