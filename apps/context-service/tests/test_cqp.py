@@ -79,6 +79,14 @@ def test_time_defaults_to_valid_and_as_of_binds_as_a_parameter():
     assert "c.valid_to > $as_of" in cypher
 
 
+def test_anchor_matches_the_object_not_only_the_entity():
+    """`Which service listens on port 5005?` returned nothing: 5005 is a claim object,
+    never an entity key, so identifier and port lookups were unreachable."""
+    cypher, _ = compile(make_plan(Intent.LOOKUP))
+
+    assert "toLower(c.object) CONTAINS toLower(a)" in cypher
+
+
 def test_superseded_chain_and_conflicts_widen_statuses():
     state_of = compile(make_plan(Intent.STATE_OF, time={"include_superseded_chain": True}))
     conflicts = compile(make_plan(Intent.CONFLICTS))

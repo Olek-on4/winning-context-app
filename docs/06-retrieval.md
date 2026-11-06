@@ -82,6 +82,11 @@ filter. That is a *classification and slot-filling* task, which is what small lo
 models are actually good at — as opposed to generating a correct graph query against
 a schema they half-remember.
 
+An anchor resolves against the claim's subject entity key **or its object**, so a port
+(`5005`), an identifier (`REDIS_URL`) or a path resolves without being an entity. What
+does not appear in either place cannot be found: a question whose only distinctive token
+is a concept returns an honest empty answer, never a guess.
+
 ## Retrieval pipeline
 
 ```mermaid

@@ -125,6 +125,16 @@ def test_envelope_and_claim_shape_are_exact(corpus):
     ]
 
 
+def test_answer_names_a_claim_that_is_neither_valid_nor_superseded(corpus):
+    """A DISPUTED-only hit used to answer "No validated claims matched the question"
+    beside a one-element `claims` array — the answer contradicting the evidence."""
+    rows = [row("c_1", citation(corpus, "wiki/inventory-service.md", (5, 5)), status="DISPUTED")]
+    result = ContextService(FakeDriver(rows), corpus).answer(QUESTION, intent="LOOKUP")
+
+    assert len(result["claims"]) == 1
+    assert result["answer"].startswith("Disputed: ")
+
+
 def test_duplicate_rows_dedup_and_merge_their_citations(corpus):
     rows = [
         row("c_1", citation(corpus, "wiki/inventory-service.md", (5, 5))),

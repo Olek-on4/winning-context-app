@@ -133,8 +133,12 @@ def validate_plan(plan: dict) -> CQP:
 # ABOUT only ever points Claim -> Entity in this schema, so direction is a plan field
 # without a template branch; max_hops binds as a cap even when the star shape needs one.
 
+# An anchor matches the subject entity key or the claim object, so a port or an
+# identifier (`5005`, `REDIS_URL`) resolves without being an entity.
+# shortcut: `c.object` is a label scan; add a full-text index on Claim.object past ~10^5 claims.
 _FILTER = """MATCH (c:Claim)-[:ABOUT]->(e:Entity)
-WHERE any(a IN $anchor_keys WHERE toLower(e.key) CONTAINS toLower(a))
+WHERE any(a IN $anchor_keys WHERE toLower(e.key) CONTAINS toLower(a)
+                              OR toLower(c.object) CONTAINS toLower(a))
   AND c.status IN $status_in
   AND c.confidence >= $min_confidence
   AND ($as_of IS NULL OR ((c.valid_from IS NULL OR c.valid_from <= $as_of)

@@ -363,6 +363,14 @@ def _conflicts(claims: list[dict]) -> list[dict]:
     return out
 
 
+_ANSWER_LABEL = {
+    Status.DISPUTED.value: "Disputed",
+    Status.PLANNED.value: "Planned",
+    Status.PROPOSED.value: "Proposed",
+    Status.UNKNOWN.value: "Unconfirmed",
+}
+
+
 def _answer_text(claims: list[dict]) -> str:
     valid = [claim for claim in claims if claim["status"] == Status.VALID.value]
     deprecated = [claim for claim in claims if claim["status"] == Status.DEPRECATED.value]
@@ -371,6 +379,14 @@ def _answer_text(claims: list[dict]) -> str:
         parts.append("; ".join(claim["statement"] for claim in valid[:3]))
     if deprecated:
         parts.append("Superseded: " + "; ".join(claim["statement"] for claim in deprecated[:2]))
+    if not parts and claims:
+        # Nothing current or superseded matched, but rows did: name them, labelled. A miss
+        # message beside a non-empty `claims` array tells the reader the opposite of the truth.
+        grouped: dict[str, list[str]] = {}
+        for claim in claims:
+            label = _ANSWER_LABEL.get(claim["status"], claim["status"].capitalize())
+            grouped.setdefault(label, []).append(claim["statement"])
+        parts = [f"{label}: " + "; ".join(statements[:2]) for label, statements in grouped.items()][:2]
     if not parts:
         return "No validated claims matched the question."
     text = ". ".join(parts)
