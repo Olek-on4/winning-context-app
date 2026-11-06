@@ -136,17 +136,29 @@ untrusted user input** ([sources](research/sources.md#prompt-injection)).
 ## IDE integration
 
 ```jsonc
-// .mcp.json
+// .mcp.json — same block as an OMP session's ~/.config/mcp/mcp.json entry
 {
   "mcpServers": {
     "etyt-context": {
+      // --directory is not optional: `-m cli` imports from the app directory, and a
+      // client spawns the command from its own cwd.
       "command": "uv",
-      "args": ["run", "python", "-m", "cli", "mcp"],
-      "env": {"NEO4J_URI": "bolt://localhost:7687"}
+      "args": ["--directory", "<repo>/apps/context-service", "run", "python", "-m", "cli", "mcp"],
+      "env": {
+        "NEO4J_URI": "bolt://localhost:7687",
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASSWORD": "etyt-context"
+      }
     }
   }
 }
 ```
+
+Verified end to end from a foreign cwd with the credentials above: the server starts,
+lists `context_search`, `context_explain_relationship`, `context_risks` and
+`resolve_span`, and answers with cited claims. It needs the Neo4j container from
+`infra/neo4j/compose.yaml` running; with the store down it still starts and reports
+`degraded: true` with the failed channel named, rather than hanging or guessing.
 
 The demo that makes the 15 points real: in the IDE, ask *"add a cache to the stock
 read path"*. Without the service, an agent reads `wiki/inventory-service.md`, finds
