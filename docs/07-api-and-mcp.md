@@ -74,7 +74,22 @@ GET  /v1/span?path=&start=&end=                                              →
 GET  /v1/gaps?kind=         (column 2)                                       → undocumented / unimplemented
 GET  /v1/sources/{path}                                                      → claims extracted from one file
 GET  /healthz  /readyz  /v1/index/status                                     → ops
+GET  /v1/mcp                                                                 → tool specs (name, intent, params)
+POST /v1/mcp/{tool}         { params }                                       → { tool, params, result }
 ```
+
+`/v1/mcp/{tool}` runs the same four tools the stdio server registers, over the same
+backend, and returns the arguments beside the answer so a reviewer can check both. It is a
+demonstration surface, not a second MCP transport: MCP itself stays stdio (ADR-0003), and
+nothing in the planner or the resolver knows this route exists. Tool specs are served by
+`GET /v1/mcp` so the web console renders real parameters instead of a caption that rots.
+
+The four tool functions live in `apps/context-service/toolcall.py`, imported by both
+`api/app.py` and `mcp_server/server.py`. That is a deliberate, temporary third shared
+module — flagged as a shortcut in the file — because the alternative was duplicating the
+envelope shaping and the tool specs in two adapters that must agree byte for byte.
+Consolidating it into `models/` is the post-demo move; it needs the workstream agreement
+that module changes require.
 
 `/v1/plan` and `/v1/execute` are split deliberately: it makes the plan inspectable,
 lets a human or a test fix a plan the planner got wrong, and turns

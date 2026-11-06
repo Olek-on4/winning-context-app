@@ -7,6 +7,10 @@
 Both transports import from here, so the stdio server and the HTTP demo endpoint run
 the same function over the same ContextBackend. There is no second implementation to
 drift.
+
+# shortcut: demo-only dual transport. `models/` is the only module every workstream is
+# meant to import (AGENTS.md Layout); merge this into `models/tools.py`, or give each
+# adapter its own, once the demo is over and the owners agree.
 """
 
 from __future__ import annotations
