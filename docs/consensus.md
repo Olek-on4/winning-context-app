@@ -67,3 +67,41 @@ Adopting it wholesale would delete a verified path; merging both means reconcili
 Issue on this repository, or a PR that changes exactly one of the files in §2. If you
 prefer a synchronous decision, the checklist above is short enough to settle in one pass:
 agree, or name the item you reject and why.
+
+## Status since the fork — 2026-11-06, `main` side
+
+Fork point is `761f5d6` (12:10). `main` is now `ce026ec`; the branch forked before any of
+the application code existed, so **both sides wrote `cli.py`, `models/claim.py`,
+`mcp_server`, `service.py` independently** — 43 files only there, 48 only here. Nothing in
+§2 has changed; issue 06 in `scripts/issues/` is the branch-side work list.
+
+What `main` now does, all verified by command today (Windows-free, RTX 3060, 6 GB):
+
+| Claim | Evidence |
+|---|---|
+| 7 corpus traps green end to end | `uv run pytest tests/golden -q` → 7 passed |
+| Full gate | `uv run pytest -q` → 73 passed, `ruff check .` clean |
+| Cold-start rehearsal | `uv run python ../../scripts/rehearse.py` → `rehearsal: READY`, 12/12 |
+| Model-backed retrieval live | 1119 of 1119 chunks carry a 768-d vector; `via: bm25+vector` on T1 |
+| Query latency | `/v1/query` 10 ms, `degraded: false` |
+
+Three defects fixed after the fork, each with a regression test or a reproducible command:
+
+1. `409b1ff` — `graph/chunks.py` computed embeddings and discarded them (0 of 1119 stored),
+   and hashed a per-body index so 434 of 1119 windows collided onto one id. The vector
+   channel was dead while `cli index` reported `embedded: true`.
+2. `48ceabc` — the golden fixture loaded claims but never indexed chunks, so the traps
+   passed or failed on whether someone had run `cli index` first.
+3. `0d2eda9` — a model-first planner lost traps G3 and G7 and invented `as_of=2022-01-01`
+   for an undated question, silently filtering out every current claim. Planning is now
+   deterministic-first; the model is the fallback for questions that name no anchor.
+
+Read these before rebasing: the failure modes above are the ones a second implementation
+will reproduce, because they are in the retrieval and planner seams, not in extraction.
+
+## Questions still open
+
+§"Questions I cannot answer alone" is unchanged and still blocks the gate layer. Q1 is the
+one to settle first: if `ingest/gates.py` runs *before* `loader.assert_loadable`, the loader
+stays the non-null guarantee and the gate only rejects spans; if it replaces the loader,
+`ClaimRecord` and the loader both lose a check. Pick one and write it in the PR title.
