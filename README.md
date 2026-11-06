@@ -116,6 +116,39 @@ make e2e                             # same, through the container stack
 The honest test is the negative one: ask "can I join employees to customers by email?"
 It must answer **no** and show `SIMILAR_NAME_TO`, not an invented join.
 
+## Demo script (5 minutes)
+
+Everything below is one terminal plus a browser.
+
+```sh
+make docker-up && make docker-demo   # graph filled, model pulled
+make ui                              # page + API on :8000 (stop the stack first if 8000 is taken)
+```
+
+**1. The claim and its evidence.** Ask *"Does inventory-service still use a Redis cache?"*.
+Current shows `READS_FROM sqlite` and `NOT READS_FROM redis`; Not valid shows the wiki claim
+as `DEPRECATED` with the reason. Click any citation — the ADR lines appear verbatim.
+
+**2. Time changes the answer.** Set `as of 2026-03-01` and ask again: Redis is valid,
+SQLite is not present yet. The URL carries `?q=…&as_of=…`.
+
+**3. API and MCP, with endpoint, parameters and raw result.** Sidebar → **API & MCP**.
+Each card is a real endpoint. Pick one, press *Run tool*, and the screen shows the request
+(`POST /v1/mcp/context_search` plus the exact params) next to the raw JSON answer. Under it,
+every citation is a button: click it and the bytes served by `/v1/span` appear — the
+fabrication test, since the text is read from the corpus, not from the answer.
+
+The same four tools are what the stdio MCP server registers, served by the same function
+(`apps/context-service/toolcall.py`), so the console cannot drift from what an agent gets.
+
+**4. MCP from an agent.** The server is registered in `~/.omp/agent/mcp.json` as
+`etyt-context`; after restarting omp, ask it to call `context_search` and `resolve_span`.
+Terminal-only check, no agent needed:
+
+```sh
+cd apps/context-service && uv run python ../../scripts/mcp_probe.py   # server, tools, claims, real bytes
+```
+
 ## Layout
 
 ```

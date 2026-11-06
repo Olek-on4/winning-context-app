@@ -37,8 +37,60 @@ export type Plan = {
   output: { token_budget: number }
 }
 
+// Every call the page makes is recorded, so the demo can show the endpoint, the
+// parameters and the raw answer next to the rendered one. No call bypasses this.
+export type Trace = {
+  id: number
+  method: string
+  url: string
+  request: unknown
+  status: number
+  ms: number
+  response: string
+}
+
+const MAX_TRACES = 30
+export const traces: Trace[] = []
+let traceId = 0
+const listeners = new Set<() => void>()
+
+export const subscribe = (fn: () => void) => {
+  listeners.add(fn)
+  return () => listeners.delete(fn)
+}
+
+function record(t: Omit<Trace, 'id'>) {
+  traces.unshift({ id: ++traceId, ...t })
+  if (traces.length > MAX_TRACES) traces.length = MAX_TRACES
+  listeners.forEach((fn) => fn())
+}
+
+const parseBody = (init: RequestInit): unknown => {
+  if (typeof init.body !== 'string') return null
+  try {
+    return JSON.parse(init.body)
+  } catch {
+    return init.body
+  }
+}
+
 async function call<T>(input: string, init: RequestInit, as: 'json' | 'text' = 'json'): Promise<T> {
+  const started = performance.now()
   const response = await fetch(input, init)
+  const clone = response.clone()
+  clone
+    .text()
+    .then((body) =>
+      record({
+        method: (init.method ?? 'GET').toUpperCase(),
+        url: input,
+        request: parseBody(init),
+        status: response.status,
+        ms: Math.round(performance.now() - started),
+        response: body.length > 4000 ? `${body.slice(0, 4000)}…` : body,
+      }),
+    )
+    .catch(() => undefined)
   if (!response.ok) {
     let detail = ''
     try {
@@ -111,5 +163,19 @@ export function whyNotValid(claim: Claim): string {
       return 'Not enough evidence to say either way.'
   }
 }
+
+export type ToolSpec = {
+  name: string
+  intent: string
+  summary: string
+  params: Record<string, { type: string; required?: boolean; default?: unknown; format?: string }>
+}
+
+export type ToolCall = { tool: string; params: Record<string, unknown>; result: Record<string, unknown> }
+
+// The MCP tools, over HTTP: same functions the stdio server registers.
+export const mcpTools = () => call<ToolSpec[]>('/v1/mcp', {})
+export const mcpCall = (tool: string, params: Record<string, unknown>) =>
+  call<ToolCall>(`/v1/mcp/${tool}`, post({ params }))
 
 export const pct = (x: number) => `${Math.round(x * 100)}%`

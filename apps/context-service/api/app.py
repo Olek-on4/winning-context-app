@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import toolcall
 from models.protocols import ContextBackend
 
 
@@ -23,6 +24,10 @@ class QueryBody(BaseModel):
 
 class PlanBody(BaseModel):
     question: str
+
+
+class ToolBody(BaseModel):
+    params: dict[str, Any] = {}
 
 
 def _web_dist() -> Path | None:
@@ -72,6 +77,22 @@ def create_app(service: ContextBackend, web_dist: Path | None = None) -> FastAPI
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from None
         return Response(content=content, media_type="text/plain; charset=utf-8")
+
+    # The demo surface: the same four tools the stdio MCP server registers, over HTTP.
+    # Self-describing so the UI renders real parameters instead of a caption.
+    @app.get("/v1/mcp")
+    def mcp_tools() -> list[dict[str, Any]]:
+        return [{"name": name, **spec} for name, spec in toolcall.TOOL_SPECS.items()]
+
+    @app.post("/v1/mcp/{tool}", response_model=None)
+    def mcp_call(tool: str, body: ToolBody) -> Any:
+        if tool not in toolcall.TOOL_SPECS:
+            raise HTTPException(404, f"unknown tool: {tool}")
+        try:
+            result = toolcall.call(service, tool, body.params)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+        return {"tool": tool, "params": body.params, "result": result}
 
     # Mounted last so /v1/* and /healthz are matched before the static files.
     web = web_dist or _web_dist()

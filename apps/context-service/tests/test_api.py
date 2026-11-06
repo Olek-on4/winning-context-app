@@ -221,3 +221,33 @@ def test_one_server_serves_the_web_ui_and_the_api(tmp_path: Path) -> None:
     assert page.status_code == 200 and page.headers["content-type"].startswith("text/html")
     assert web.get("/healthz").json() == {"status": "ok"}
     assert web.post("/v1/query", json={"question": "q"}).json() == ENVELOPE
+
+
+def test_mcp_http_endpoint_lists_the_tools_the_stdio_server_registers() -> None:
+    names = [tool["name"] for tool in client().get("/v1/mcp").json()]
+    assert names == ["context_search", "context_explain_relationship", "context_risks", "resolve_span"]
+    assert client().get("/v1/mcp").json()[0]["params"]["question"]["required"] is True
+
+
+def test_mcp_http_call_returns_exactly_what_rest_returns() -> None:
+    rest = client().post("/v1/query", json={"question": "q"}).json()
+    body = client().post("/v1/mcp/context_search", json={"params": {"question": "q"}}).json()
+
+    assert body["tool"] == "context_search"
+    assert body["params"] == {"question": "q"}
+    assert body["result"] == rest  # one implementation behind both transports
+
+
+def test_mcp_http_rejects_an_unknown_tool_and_a_missing_parameter() -> None:
+    assert client().post("/v1/mcp/nope", json={"params": {}}).status_code == 404
+    assert client().post("/v1/mcp/context_risks", json={"params": {}}).status_code == 400
+
+
+def test_mcp_http_span_returns_the_source_bytes() -> None:
+    body = client().post(
+        "/v1/mcp/resolve_span",
+        json={"params": {"path": "docs/adr/003-stock-cache.md", "start": 6, "end": 6}},
+    ).json()
+
+    assert body["result"]["text"].strip()  # read from the corpus, not from the answer
+    assert client().post("/v1/mcp/resolve_span", json={"params": {"path": "nope.md", "start": 1, "end": 2}}).json()["result"]["error"] == "not_found"

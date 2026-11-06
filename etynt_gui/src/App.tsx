@@ -3,9 +3,10 @@ import type { FormEvent } from 'react'
 import logo from './assets/northstar-bookshelf.png'
 import * as api from './api'
 import type { Citation, Claim, Envelope, Plan } from './api'
+import DeveloperView from './DeveloperView'
 import './App.css'
 
-type View = 'search' | 'history'
+type View = 'search' | 'history' | 'dev'
 type Tab = 'evidence' | 'sources' | 'timeline' | 'plan'
 type Result = { question: string; asOf: string | null; envelope: Envelope }
 
@@ -158,6 +159,7 @@ function App() {
           <nav aria-label="Workspace">
             <button className={`nav-item ${view === 'search' ? 'active' : ''}`} type="button" onClick={() => { setView('search'); setNavOpen(false) }}><span>⌕</span> Search</button>
             <button className={`nav-item ${view === 'history' ? 'active' : ''}`} type="button" onClick={() => { setView('history'); setNavOpen(false) }}><span>⌛</span> Query history {history.length > 0 && <em>{history.length}</em>}</button>
+            <button className={`nav-item ${view === 'dev' ? 'active' : ''}`} type="button" onClick={() => { setView('dev'); setNavOpen(false) }}><span>⌘</span> API &amp; MCP</button>
           </nav>
           <div className="sidebar-label sidebar-examples">TRY A TRAP</div>
           <nav aria-label="Example questions">
@@ -182,7 +184,9 @@ function App() {
           </form>
 
           <div aria-live="polite" aria-busy={loading}>
-            {view === 'history' ? (
+            {view === 'dev' ? (
+              <DeveloperView />
+            ) : view === 'history' ? (
               <HistoryView items={history} onAsk={ask} onClear={() => { setHistory([]); localStorage.removeItem(HISTORY_KEY) }} />
             ) : loading ? (
               <LoadingState />

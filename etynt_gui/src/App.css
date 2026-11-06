@@ -640,3 +640,31 @@ pre code > div { white-space: pre-wrap; }
 .plan-grid dd { color: var(--dp-color-ink); }
 .plan-grid dt, .plan-grid dd { border-bottom-color: #9aa3a8; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* API & MCP console: request and raw response side by side, then the trace. */
+.dev { display: flex; flex-direction: column; gap: 18px; padding-bottom: 40px; }
+.dev-head h2 { margin: 0 0 6px; font-size: 20px; }
+.dev-head p { margin: 0; color: #93a3b8; font-size: 13px; max-width: 70ch; line-height: 1.5; }
+.dev-tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.dev-tool { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 12px 14px; border-radius: 10px; border: 1px solid #223047; background: #131c2b; color: #c6d2e2; cursor: pointer; }
+.dev-tool code { color: #7fb3ff; font-size: 12px; }
+.dev-tool strong { font-size: 11px; letter-spacing: .08em; color: #8ea2bd; }
+.dev-tool span { font-size: 12px; color: #92a2b8; line-height: 1.4; }
+.dev-tool.active { border-color: #3b6ea8; background: #16243a; }
+.dev-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.dev-form input { flex: 1 1 320px; padding: 10px 12px; border-radius: 9px; border: 1px solid #223047; background: #0f1725; color: #dbe5f2; }
+.dev-exchange { display: grid; grid-template-columns: 1fr 1.4fr; gap: 12px; }
+@media (max-width: 900px) { .dev-exchange { grid-template-columns: 1fr; } }
+.dev pre { margin: 6px 0 0; padding: 12px; border-radius: 9px; background: #0c1420; border: 1px solid #1d2939; color: #b9c7d8; font-size: 12px; line-height: 1.5; overflow: auto; max-height: 320px; white-space: pre-wrap; word-break: break-word; }
+.dev-response em { margin-left: 8px; color: #7fb3ff; font-style: normal; }
+.dev-error { color: #ff8f8f; font-size: 13px; }
+.dev-citations { display: flex; flex-direction: column; gap: 6px; }
+.dev-cite { display: flex; gap: 10px; align-items: baseline; text-align: left; padding: 8px 10px; border-radius: 8px; border: 1px solid #223047; background: #121b29; color: #c6d2e2; cursor: pointer; }
+.dev-cite code { color: #7fb3ff; font-size: 12px; white-space: nowrap; }
+.dev-cite span { font-size: 12px; color: #93a3b8; }
+.dev-span pre { max-height: 260px; }
+.dev-spec ul { margin: 6px 0 0; padding-left: 18px; color: #93a3b8; font-size: 12px; }
+.dev-spec code { color: #7fb3ff; }
+.dev-trace details { border: 1px solid #1d2939; border-radius: 9px; margin-bottom: 6px; background: #101927; }
+.dev-trace summary { display: flex; justify-content: space-between; gap: 10px; padding: 8px 12px; cursor: pointer; font-size: 12px; color: #b9c7d8; }
+.dev-trace summary em { color: #7f92a9; font-style: normal; }

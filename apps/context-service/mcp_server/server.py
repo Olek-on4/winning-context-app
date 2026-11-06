@@ -1,37 +1,25 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 """stdio MCP server: three workflow tools plus the citation reader, all over a ContextBackend.
 
-Same backend object as REST, so tool behaviour is testable without an MCP client.
+The tools themselves live in `toolcall`, so the HTTP demo endpoint runs the same code.
+MCP returns text, so each wrapper serialises the shared result.
 """
 
 from __future__ import annotations
 
-import json
+from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 
+import toolcall
 from models.protocols import ContextBackend
 
-INTENT_BY_TOOL = {
-    "context_search": "STATE_OF",
-    "context_explain_relationship": "RELATIONSHIP",
-    "context_risks": "RISKS",
-}
 
-
-def _answer_json(
-    service: ContextBackend,
-    question: str,
-    intent: str,
-    *,
-    as_of: str | None,
-    status_in: list[str] | None,
-    token_budget: int,
-) -> str:
-    envelope = service.answer(
-        question, intent=intent, as_of=as_of, status_in=status_in, token_budget=token_budget
-    )
-    # Sorted keys keep the wire form identical across runs and across tools.
-    return json.dumps(envelope, sort_keys=True, separators=(",", ":"))
+def _text(service: ContextBackend, name: str, params: dict[str, Any]) -> str:
+    return toolcall.as_text(toolcall.call(service, name, params))
 
 
 def context_search(
@@ -42,7 +30,9 @@ def context_search(
     status_in: list[str] | None = None,
     token_budget: int = 2000,
 ) -> str:
-    return _answer_json(service, question, "STATE_OF", as_of=as_of, status_in=status_in, token_budget=token_budget)
+    return _text(service, "context_search", {
+        "question": question, "as_of": as_of, "status_in": status_in, "token_budget": token_budget,
+    })
 
 
 def context_explain_relationship(
@@ -53,7 +43,9 @@ def context_explain_relationship(
     status_in: list[str] | None = None,
     token_budget: int = 2000,
 ) -> str:
-    return _answer_json(service, question, "RELATIONSHIP", as_of=as_of, status_in=status_in, token_budget=token_budget)
+    return _text(service, "context_explain_relationship", {
+        "question": question, "as_of": as_of, "status_in": status_in, "token_budget": token_budget,
+    })
 
 
 def context_risks(
@@ -64,23 +56,18 @@ def context_risks(
     status_in: list[str] | None = None,
     token_budget: int = 2000,
 ) -> str:
-    return _answer_json(service, question, "RISKS", as_of=as_of, status_in=status_in, token_budget=token_budget)
+    return _text(service, "context_risks", {
+        "question": question, "as_of": as_of, "status_in": status_in, "token_budget": token_budget,
+    })
 
 
 def resolve_span(service: ContextBackend, path: str, start: int, end: int) -> str:
-    """Return the bytes a citation points at, or a JSON error instead of raising."""
-    try:
-        content = service.spans.read(path, start, end)
-    except FileNotFoundError:
-        return json.dumps({"error": "not_found", "path": path}, sort_keys=True)
-    except PermissionError:
-        return json.dumps({"error": "path_escapes_corpus", "path": path}, sort_keys=True)
-    except ValueError as exc:
-        return json.dumps({"error": "bad_range", "detail": str(exc)}, sort_keys=True)
-    try:
-        return content.decode("utf-8")
-    except UnicodeDecodeError:
-        return json.dumps({"error": "not_utf8", "path": path}, sort_keys=True)
+    """The bytes a citation points at, or a JSON error instead of raising.
+
+    Plain text on success (the agent reads it), a JSON object on failure.
+    """
+    result = toolcall.call(service, "resolve_span", {"path": path, "start": start, "end": end})
+    return result["text"] if "text" in result else toolcall.as_text(result)
 
 
 def build_server(service: ContextBackend) -> MCPServer:
