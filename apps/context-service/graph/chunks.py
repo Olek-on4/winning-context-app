@@ -21,21 +21,21 @@ HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
 UPSERT = """
 UNWIND $chunks AS c
 MERGE (ch:Chunk {id: c.id})
-SET ch.text = c.text, ch.heading_path = c.heading, ch.token_count = c.tokens
+SET ch.text = c.text, ch.heading_path = c.heading, ch.token_count = c.tokens,
+    ch.embedding = c.embedding
 MERGE (src:Source {path: c.path})
 SET src.content_hash = c.hash
 MERGE (ch)-[:IN]->(src)
 """
 
 
-def _windows(root: Root, pointer: str, digest: str, heading: str, body: list[str]):
-    text = "\n".join(body).strip()
-    if not text:
-        return
+def _windows(pointer: str, digest: str, heading: str, text: str, base: int):
+    """`base` is the char offset of `text` in its file, so ids stay unique when one
+    heading yields several windows — a per-body index would collide and lose text."""
     for index in range(0, len(text), TARGET_CHARS):
         part = text[index : index + TARGET_CHARS]
         yield {
-            "id": hashlib.sha256(f"{pointer}|{heading}|{index}".encode()).hexdigest()[:16],
+            "id": hashlib.sha256(f"{pointer}|{heading}|{base + index}".encode()).hexdigest()[:16],
             "text": f"{heading}\n{part}".strip() if heading else part,
             "heading": heading,
             "tokens": len(part) // 4,
@@ -44,29 +44,34 @@ def _windows(root: Root, pointer: str, digest: str, heading: str, body: list[str
         }
 
 
+def _append_windows(out: list[dict], pointer: str, digest: str, heading: str, body: list[str], base: int) -> int:
+    """Append this body's windows; return the char length they advanced the file by."""
+    text = "\n".join(body).strip()
+    if not text:
+        return 0
+    out.extend(_windows(pointer, digest, heading, text, base))
+    return len(text)
+
+
 def chunks_for(root: Root) -> list[dict]:
     """Heading-aware, line-streamed. One list per file, flushed by the caller."""
     out: list[dict] = []
     for relative, digest in iter_files(root):
         pointer = root.pointer(relative)
-        heading, body = "", []
-        total = 0
+        heading, body, offset = "", [], 0
         with (root.path / relative).open("r", encoding="utf-8", errors="replace") as handle:
             for line in handle:
-                total += len(line)
                 match = HEADING.match(line)
                 if match and body:
-                    out.extend(_windows(root, pointer, digest, heading, body))
+                    offset += _append_windows(out, pointer, digest, heading, body, offset)
                     body = []
                 if match:
                     heading = match.group(2).strip()
                 body.append(line)
                 if sum(len(b) for b in body) > TARGET_CHARS * 4:  # keep the buffer bounded
-                    out.extend(_windows(root, pointer, digest, heading, body))
+                    offset += _append_windows(out, pointer, digest, heading, body, offset)
                     body = []
-        out.extend(_windows(root, pointer, digest, heading, body))
-        if total == 0:
-            continue
+        _append_windows(out, pointer, digest, heading, body, offset)
     return out
 
 
