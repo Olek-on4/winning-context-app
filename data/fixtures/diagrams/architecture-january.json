@@ -1,0 +1,17 @@
+{
+  "source": "diagrams/architecture-january.png",
+  "transcribed_by": "claude-opus-5-5, from the rendered PNG",
+  "reviewed_by": null,
+  "note": "One line per labelled edge; arrow labels between dashes. Needs one human review before reviewed_by is set.",
+  "lines": [
+    "Northstar architecture / January 2026 / winter review",
+    "Storefront --profile--> Accounts v1",
+    "Storefront --checkout--> Orders",
+    "Support console --support read--> Orders",
+    "Orders --charge--> Charge Ledger",
+    "Orders --quote--> Stock",
+    "Accounts v1 --> Local SQL stores",
+    "Stock --stock writes--> Local SQL stores",
+    "Stock --catalog read--> Redis read cache"
+  ]
+}
