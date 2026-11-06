@@ -96,12 +96,17 @@ class SpanStore:
             self._roots.setdefault("", Path(fallback).resolve())
 
     def _base(self, pointer: str) -> tuple[Path, str]:
-        """`<root>/<rel>` when the root is known; a bare path when only one tree exists."""
+        """`<root>/<rel>` when the root is known; a bare path is resolved against any root.
+
+        Bare pointers are what reviewed fixtures use, and they must keep working after a
+        second corpus is mounted, so existence decides rather than root count.
+        """
         identifier, _, relative = pointer.partition("/")
         if identifier in self._roots:
             return self._roots[identifier], relative
-        if len(self._roots) == 1:
-            return next(iter(self._roots.values())), pointer
+        for base in self._roots.values():
+            if (base / pointer).exists():  # a directory is a refused path, not a missing one
+                return base, pointer
         raise FileNotFoundError(pointer)
 
     def resolve(self, pointer: str) -> Path:

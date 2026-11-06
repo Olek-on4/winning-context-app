@@ -48,6 +48,60 @@ Four lanes, one owner each, four frozen contracts between them
 Only two waits exist (extraction→core, core→search) and both consume a file, not a
 running service.
 
+## Use it
+
+```sh
+make docker-up          # neo4j + ollama + app, all healthy
+make docker-demo        # pull model, extract, load, index -- then it prints a curl
+make test               # whole suite, no containers needed except the golden traps
+make e2e                # proves the containerised stack answers REST and MCP
+```
+
+Ask it things over REST:
+
+```sh
+curl -s localhost:8000/v1/query -H 'content-type: application/json' \
+  -d '{"question":"Does inventory-service still use a Redis cache?"}'
+```
+
+Every claim comes back with `status`, an interval and citations as
+`{path, lines, hash}`. The text behind a citation is served by
+`GET /v1/span?path=…&start=…&end=…`, never stored twice.
+
+### Add your own data
+
+A "source" is any directory. Point the extractor at it and it is indexed and
+discoverable immediately:
+
+```sh
+cd apps/context-service
+uv run python -m cli extract --source /path/to/your/repo --source ../../vendor/att-hackathon-task
+uv run python -m cli load /path/to/claims.jsonl        # EXTRACTED_PATH controls the file
+uv run python -m cli index --source /path/to/your/repo --source ../../vendor/att-hackathon-task
+```
+
+What happens automatically: every text file is chunked and embedded for search; `.sql`
+`ALTER TABLE` statements become `HAS_COLUMN` claims (renames emit a negation);
+`compose.yaml`, `package.json` and `CODEOWNERS` become `DEFINED_IN` / `DEPENDS_ON` /
+`OWNS`; markdown `Date:`/`Status:`/`Owner:` headers become document facts. Claims carry
+a pointer and a file hash, so a citation can always be re-read from the tree.
+
+A new *data type* is one class plus `register()` — see
+`apps/context-service/ingest/registry.py`; nothing else changes, and
+`tests/test_agnostic.py` proves it on a directory that shares no layout with the corpus.
+
+### Test that it finds things
+
+```sh
+uv run pytest tests/golden -v        # seven traps: answer + status + citation
+uv run pytest tests/test_vectors.py  # every chunk has a vector, paraphrase retrieves
+make rehearse                        # cold start: wipe, rebuild, serve, seven steps
+make e2e                             # same, through the container stack
+```
+
+The honest test is the negative one: ask "can I join employees to customers by email?"
+It must answer **no** and show `SIMILAR_NAME_TO`, not an invented join.
+
 ## Layout
 
 ```

@@ -2,7 +2,7 @@ APP := apps/context-service
 COMPOSE := docker compose -f infra/neo4j/compose.yaml
 CLAIMS := ../../data/fixtures/claims-sample.jsonl ../../data/local/claims-extracted.jsonl
 
-.PHONY: up down extract index load serve mcp demo test lint fmt rehearse check install-hooks gpu docker-up docker-down docker-index docker-demo
+.PHONY: up down extract index load serve mcp demo test lint fmt rehearse check install-hooks gpu e2e docker-up docker-down docker-index docker-demo
 
 up: ## start neo4j
 	$(COMPOSE) up -d
@@ -52,6 +52,9 @@ lint:
 
 fmt:
 	cd $(APP) && uv run ruff format .
+
+e2e: ## prove the containerised stack answers REST and MCP
+	cd $(APP) && uv run python ../../scripts/e2e_docker.py
 
 rehearse:
 	cd $(APP) && uv run python ../../scripts/rehearse.py

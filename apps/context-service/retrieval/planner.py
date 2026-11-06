@@ -232,7 +232,8 @@ _STOPWORDS = {
     "has", "had", "what", "which", "who", "how", "where", "when", "why", "any",
     "and", "or", "of", "in", "on", "for", "to", "from", "with", "about", "use", "uses",
     "using", "table", "fields", "field", "columns", "system", "service", "there", "tell",
-    "me", "we", "it", "current", "currently", "now", "status", "value",
+    "me", "we", "it", "current", "currently", "now", "status", "value", "happened",
+    "happen", "changed", "change", "used", "make", "makes", "work", "works",
 }
 
 
@@ -244,13 +245,14 @@ def _anchors(question: str) -> list[Anchor]:
             if token and len(token) <= 80 and token not in found:
                 found.append(token)
     if not found:
-        # No identifier in the question: fall back to content words, which still hit
-        # entity keys such as `users` or `orders`.
+        # No identifier in the question: content words still hit entity keys such as
+        # `users` or `invoices`. Keep more than three — the entity is often mentioned
+        # late ("what happened to state in invoices").
         found = [
             word.lower()
             for word in re.findall(r"[A-Za-z][A-Za-z0-9_]{2,}", question)
             if word.lower() not in _STOPWORDS
-        ][:3]
+        ][:6]
     anchors: list[Anchor] = []
     for token in found[:4]:
         if " " in token:
