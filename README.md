@@ -118,37 +118,51 @@ It must answer **no** and show `SIMILAR_NAME_TO`, not an invented join.
 
 ## Demo script (5 minutes)
 
-Everything below is one terminal plus a browser.
+**One port, one server.** `make ui` and the container both want `:8000`; pick a path.
 
 ```sh
-make docker-up && make docker-demo   # graph filled, model pulled
-make ui                              # page + API on :8000 (stop the stack first if 8000 is taken)
+git status -sb                       # clean, or commit+push first
+make docker-down                     # if the container stack is up
+make ui                              # builds if stale, then page + API on :8000
+curl -s localhost:8000/ | head -c 40 # must print <!doctype html>
 ```
+
+Container path instead: `make docker-up && make docker-demo`, then `make ui-build`
+(compose mounts `etynt_gui/dist`); never both at once.
 
 **1. The claim and its evidence.** Ask *"Does inventory-service still use a Redis cache?"*.
 Current shows `READS_FROM sqlite` and `NOT READS_FROM redis`; Not valid shows the wiki claim
 as `DEPRECATED` with the reason. Click any citation — the ADR lines appear verbatim.
 
-**2. Time changes the answer.** Set `as of 2026-03-01` and ask again: Redis is valid,
-SQLite is not present yet. The URL carries `?q=…&as_of=…`.
+**2. Time changes the answer.** Set `as of 2026-03-01`: Redis is valid, SQLite is absent.
 
-**3. API and MCP, with endpoint, parameters and raw result.** Sidebar → **API & MCP**.
-Each card is a real endpoint. Pick one, press *Run tool*, and the screen shows the request
-(`POST /v1/mcp/context_search` plus the exact params) next to the raw JSON answer. Under it,
-every citation is a button: click it and the bytes served by `/v1/span` appear — the
-fabrication test, since the text is read from the corpus, not from the answer.
+**3. API and MCP with endpoint, parameters and raw result.** Sidebar → **API & MCP**.
+The tool cards come from `GET /v1/mcp`, and the form fields are built from each tool's
+declared parameters — no captions. Pick one, press *Run tool*: the request line
+(`POST /v1/mcp/context_search` plus exact params) sits beside the raw JSON. Under it every
+citation is a button; clicking reads the bytes from `/v1/span`. Bottom: the HTTP trace of
+every call the page made, including failures (status 0).
 
-The same four tools are what the stdio MCP server registers, served by the same function
-(`apps/context-service/toolcall.py`), so the console cannot drift from what an agent gets.
+**4. MCP from the agent.** The stdio server is registered in `~/.omp/agent/mcp.json` as
+`etyt-context`. Servers connect at session start, so reload once:
 
-**4. MCP from an agent.** The server is registered in `~/.omp/agent/mcp.json` as
-`etyt-context`; after restarting omp, ask it to call `context_search` and `resolve_span`.
-Terminal-only check, no agent needed:
-
-```sh
-cd apps/context-service && uv run python ../../scripts/mcp_probe.py   # server, tools, claims, real bytes
+```
+/reload        then  /mcp        # etyt-context with four tools
 ```
 
+Ask it for `context_search` on the Redis question, then `resolve_span` on a returned
+citation. Three-way match — tool bytes, file bytes, corpus commit:
+
+```sh
+sed -n '6,6p' vendor/att-hackathon-task/docs/adr/003-stock-cache.md
+git -C vendor/att-hackathon-task log -1 --format='%H' -- docs/adr/003-stock-cache.md
+```
+
+Terminal-only check of the same server, no agent needed:
+
+```sh
+cd apps/context-service && uv run python ../../scripts/mcp_probe.py
+```
 ## Layout
 
 ```

@@ -27,8 +27,8 @@ function Citations({ result, onSpan }: { result: Record<string, unknown>; onSpan
 export default function DeveloperView() {
   const [tools, setTools] = useState<api.ToolSpec[]>([])
   const [name, setName] = useState('context_search')
-  const [question, setQuestion] = useState('Does inventory-service still use a Redis cache?')
-  const [asOf, setAsOf] = useState('')
+  // One value per parameter of the selected tool, seeded from the spec the service sends.
+  const [values, setValues] = useState<Record<string, string>>({})
   const [span, setSpan] = useState<{ path: string; text: string } | null>(null)
   const [call, setCall] = useState<api.ToolCall | null>(null)
   const [error, setError] = useState('')
@@ -45,17 +45,42 @@ export default function DeveloperView() {
 
   const spec = tools.find((t) => t.name === name)
 
-  const paramsFor = (tool: string): Record<string, unknown> =>
-    tool === 'resolve_span'
-      ? { path: 'docs/adr/003-stock-cache.md', start: 6, end: 12 }
-      : { question, ...(asOf ? { as_of: asOf } : {}) }
+  const seed = (spec: api.ToolSpec): Record<string, string> => {
+    const out: Record<string, string> = {}
+    for (const [key, p] of Object.entries(spec.params)) {
+      out[key] =
+        key === 'question'
+          ? 'Does inventory-service still use a Redis cache?'
+          : key === 'path'
+            ? 'docs/adr/003-stock-cache.md'
+            : key === 'start'
+              ? '6'
+              : key === 'end'
+                ? '12'
+                : p.default !== undefined
+                  ? String(p.default)
+                  : ''
+    }
+    return out
+  }
+
+  // Built from the spec, not hardcoded: a new parameter on the server appears here.
+  const paramsFor = (spec: api.ToolSpec | undefined): Record<string, unknown> => {
+    const out: Record<string, unknown> = {}
+    for (const [key, p] of Object.entries(spec?.params ?? {})) {
+      const raw = values[key] ?? ''
+      if (raw === '') continue
+      out[key] = p.type === 'integer' ? Number(raw) : raw
+    }
+    return out
+  }
 
   const run = async () => {
     setBusy(true)
     setError('')
     setSpan(null)
     try {
-      setCall(await api.mcpCall(name, paramsFor(name)))
+      setCall(await api.mcpCall(name, paramsFor(spec)))
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -84,7 +109,17 @@ export default function DeveloperView() {
 
       <div className="dev-tools">
         {tools.map((t) => (
-          <button key={t.name} type="button" className={`dev-tool ${t.name === name ? 'active' : ''}`} onClick={() => setName(t.name)}>
+          <button
+            key={t.name}
+            type="button"
+            className={`dev-tool ${t.name === name ? 'active' : ''}`}
+            onClick={() => {
+              setName(t.name)
+              setValues(seed(t))
+              setCall(null)
+              setSpan(null)
+            }}
+          >
             <code>POST /v1/mcp/{t.name}</code>
             <strong>{t.intent}</strong>
             <span>{t.summary}</span>
@@ -93,17 +128,19 @@ export default function DeveloperView() {
       </div>
 
       <div className="dev-form">
-        {name !== 'resolve_span' ? (
-          <>
-            <input value={question} onChange={(e) => setQuestion(e.target.value)} aria-label="question" />
-            <label className="as-of">
-              <span>as of</span>
-              <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} aria-label="As of date" />
+        {Object.entries(spec?.params ?? {})
+          .filter(([, p]) => p.required || p.type !== 'array')
+          .map(([key, p]) => (
+            <label key={key} className="dev-field">
+              <span>{key}{p.required ? ' *' : ''}</span>
+              <input
+                type={p.format === 'date' ? 'date' : 'text'}
+                value={values[key] ?? ''}
+                onChange={(e) => setValues({ ...values, [key]: e.target.value })}
+                aria-label={key}
+              />
             </label>
-          </>
-        ) : (
-          <input value={question} onChange={(e) => setQuestion(e.target.value)} aria-label="path" placeholder="path" />
-        )}
+          ))}
         <button type="button" className="search-button" onClick={run} disabled={busy}>
           {busy ? 'Running…' : 'Run tool'}
         </button>
@@ -112,7 +149,7 @@ export default function DeveloperView() {
       <div className="dev-exchange">
         <div className="dev-request">
           <div className="sidebar-label">REQUEST</div>
-          <pre>{`POST /v1/mcp/${name}\n${pretty({ params: paramsFor(name) })}`}</pre>
+          <pre>{`POST /v1/mcp/${name}\n${pretty({ params: paramsFor(spec) })}`}</pre>
         </div>
         <div className="dev-response">
           <div className="sidebar-label">RESPONSE {call && <em>{call.result.claims ? `${(call.result.claims as unknown[]).length} claims` : 'span'}</em>}</div>

@@ -76,7 +76,22 @@ const parseBody = (init: RequestInit): unknown => {
 
 async function call<T>(input: string, init: RequestInit, as: 'json' | 'text' = 'json'): Promise<T> {
   const started = performance.now()
-  const response = await fetch(input, init)
+  let response: Response
+  try {
+    response = await fetch(input, init)
+  } catch (e) {
+    // A rejected fetch leaves no response; record it anyway — "the service is down" is
+    // exactly the moment the demo must still be able to show evidence for.
+    record({
+      method: (init.method ?? 'GET').toUpperCase(),
+      url: input,
+      request: parseBody(init),
+      status: 0,
+      ms: Math.round(performance.now() - started),
+      response: `${(e as Error).name}: ${(e as Error).message}`,
+    })
+    throw e
+  }
   const clone = response.clone()
   clone
     .text()
