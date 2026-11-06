@@ -90,8 +90,10 @@ Three defects fixed after the fork, each with a regression test or a reproducibl
 1. `409b1ff` — `graph/chunks.py` computed embeddings and discarded them (0 of 1119 stored),
    and hashed a per-body index so 434 of 1119 windows collided onto one id. The vector
    channel was dead while `cli index` reported `embedded: true`.
-2. `48ceabc` — the golden fixture loaded claims but never indexed chunks, so the traps
-   passed or failed on whether someone had run `cli index` first.
+2. `48ceabc` was reverted in `ba8db13`: the golden fixture never needed a chunk index.
+   Answers come from compiled CQP rows (`service.py` uses hybrid only at lines 99 and 116,
+   for gap text), and with indexing disabled all seven traps still pass. The three failures
+   that motivated it came from a probe wiping the graph while the suite was mid-run.
 3. `0d2eda9` — a model-first planner lost traps G3 and G7 and invented `as_of=2022-01-01`
    for an undated question, silently filtering out every current claim. Planning is now
    deterministic-first; the model is the fallback for questions that name no anchor.
