@@ -1,6 +1,6 @@
 # Ety&T — Etymology & Translation
 
-Solution for the AT&T Context Service hackathon. An evidence-backed, time-aware
+Built for the AT&T Context Service hackathon. **Ety&T** is an evidence-backed, time-aware
 Context Service over the [Northstar Equipment](https://github.com/arkik7/att-hackathon-task)
 corpus (twelve apps, docs, wiki, meeting notes, incidents, API specs, diagrams).
 
@@ -73,6 +73,34 @@ Refresh the corpus to the pinned commit after a pull:
 ```sh
 git submodule update --recursive
 ```
+
+## Run it
+
+Two paths, one API at `http://127.0.0.1:8000`.
+
+**Host** — Python 3.12 + `uv`, Neo4j in Docker, Ollama on the host:
+
+```sh
+make up      # start neo4j
+make demo    # up extract load index, then print the query to run
+make serve   # REST on :8000
+```
+
+**Containers** — Neo4j and the service both in Docker, corpus mounted read-only:
+
+```sh
+make docker-up     # build + start etyt-neo4j and etyt-app
+make docker-demo   # the same pipeline, inside etyt-app
+```
+
+| Container | Role |
+|---|---|
+| `etyt-neo4j` | `neo4j:5-community`; browser on `http://127.0.0.1:7474`, auth `neo4j` / `etyt-context` |
+| `etyt-app` | the Context Service; REST + MCP; `http://127.0.0.1:8000` |
+
+`OLLAMA_HOST` is unset inside `etyt-app` by default, so a container run indexes lexically
+(`{"embedded": false}`) unless it is passed in. Full rehearsal script:
+[docs/demo.md](docs/demo.md).
 
 ## Corpus facts
 

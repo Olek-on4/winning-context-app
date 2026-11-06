@@ -2,13 +2,29 @@ APP := apps/context-service
 COMPOSE := docker compose -f infra/neo4j/compose.yaml
 CLAIMS := ../../data/fixtures/claims-sample.jsonl ../../data/local/claims-extracted.jsonl
 
-.PHONY: up down extract index load serve mcp demo test lint fmt rehearse check install-hooks gpu
+.PHONY: up down extract index load serve mcp demo test lint fmt rehearse check install-hooks gpu docker-up docker-down docker-index docker-demo
 
 up: ## start neo4j
 	$(COMPOSE) up -d
 
 down: ## stop neo4j
 	$(COMPOSE) down
+
+docker-up: ## neo4j + ollama + app in containers
+	$(COMPOSE) up -d --build
+
+docker-down: ## stop the container stack
+	$(COMPOSE) down
+
+docker-index: ## chunk the corpus inside the app container (embeds via etyt-ollama)
+	$(COMPOSE) exec -T app python -m cli index
+
+docker-demo: docker-up ## whole stack in docker, then print the query to run
+	$(COMPOSE) exec -T ollama ollama pull nomic-embed-text
+	$(COMPOSE) exec -T app python -m cli extract
+	$(COMPOSE) exec -T app python -m cli load /repo/data/fixtures/claims-sample.jsonl /data/local/claims-extracted.jsonl
+	$(COMPOSE) exec -T app python -m cli index
+	@echo "curl -s localhost:8000/v1/query -H 'content-type: application/json' -d '{\"question\":\"Does inventory-service still use a Redis cache?\"}'"
 
 extract: ## deterministic claims -> data/local/claims-extracted.jsonl
 	cd $(APP) && uv run python -m cli extract

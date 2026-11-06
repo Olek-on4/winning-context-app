@@ -1,5 +1,11 @@
 # syntax=docker/dockerfile:1
 # Two stages: uv resolves the lock once, the runtime carries only the venv and the code.
+#
+# Embeddings come from a sibling `ollama` service (see infra/neo4j/compose.yaml), not
+# from this image. CPU inference is the default in-container path: no GPU is required
+# and `ollama` silently falls back to CPU when no device is visible. GPU inference
+# needs nvidia-container-toolkit on the host plus the `deploy.resources.reservations
+# .devices` block in the compose file (left commented out there).
 FROM python:3.12-slim AS build
 COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /uvx /bin/
 WORKDIR /app
