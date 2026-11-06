@@ -64,6 +64,9 @@ services:
       OLLAMA_HOST: http://etyt-ollama:11434
       OLLAMA_EMBED_MODEL: nomic-embed-text
       EXTRACTED_PATH: /data/local/claims-extracted.jsonl
+      # Built UI on the host (`make ui-build`); the repo is mounted at /repo, read-only,
+      # so the static mount needs no rebuild of the image.
+      WEB_DIST: /repo/etynt_gui/dist
     volumes:
       # Whole repo read-only so `git log` dates work during extraction; data is writable.
       - ../..:/repo:ro

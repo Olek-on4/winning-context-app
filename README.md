@@ -53,6 +53,7 @@ running service.
 ```sh
 make docker-up          # neo4j + ollama + app, all healthy
 make docker-demo        # pull model, extract, load, index -- then it prints a curl
+make ui                 # build the web UI, then serve page + API on :8000
 make test               # whole suite, no containers needed except the golden traps
 make e2e                # proves the containerised stack answers REST and MCP
 ```

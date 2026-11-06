@@ -2,7 +2,7 @@ APP := apps/context-service
 COMPOSE := docker compose -f infra/neo4j/compose.yaml
 CLAIMS := ../../data/fixtures/claims-sample.jsonl ../../data/local/claims-extracted.jsonl
 
-.PHONY: up down extract index load serve mcp demo test lint fmt rehearse check install-hooks gpu e2e docker-up docker-down docker-index docker-demo
+.PHONY: up down extract index load serve ui ui-build mcp demo test lint fmt rehearse check install-hooks gpu e2e docker-up docker-down docker-index docker-demo
 
 up: ## start neo4j
 	$(COMPOSE) up -d
@@ -35,8 +35,15 @@ index: ## chunk the corpus for hybrid search
 load: ## fixtures + extracted claims into the graph
 	cd $(APP) && uv run python -m cli load $(CLAIMS)
 
-serve: ## REST on :8000
+serve: ## REST on :8000 (API only; use `make ui` for the web page)
 	cd $(APP) && uv run python -m cli serve
+
+ui-build: ## npm ci + vite build into etynt_gui/dist
+	cd etynt_gui && { test -d node_modules || npm ci; } && npm run build
+
+ui: ## build the web UI, then serve page + API on :8000
+	cd etynt_gui && { test -d node_modules || npm ci; } && npm run build
+	cd $(APP) && WEB_DIST=$$PWD/../../etynt_gui/dist uv run python -m cli serve
 
 mcp: ## MCP over stdio
 	cd $(APP) && uv run python -m cli mcp
