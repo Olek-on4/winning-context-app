@@ -5,6 +5,10 @@ Design record for an evidence-backed, time-aware Context Service over the
 
 Read in order. Each document is load-bearing; there is no overview-of-the-overview.
 
+New here, or handing this to someone who is? Start with
+[11 — how it works](11-how-it-works.md). It is the plain-words tour; the numbered design
+record below stays authoritative.
+
 | # | Document | Answers |
 |---|----------|---------|
 | 00 | [brief.md](00-brief.md) | What was asked, and how it is scored |
@@ -18,6 +22,7 @@ Read in order. Each document is load-bearing; there is no overview-of-the-overvi
 | 08 | [delivery-plan.md](08-delivery-plan.md) | Who builds what, in what order, in 5 hours |
 | 09 | [evaluation.md](09-evaluation.md) | How we know it works, and what it cannot do |
 | 10 | [workstreams.md](10-workstreams.md) | Who builds what, and what each lane hands over |
+| 11 | [how-it-works.md](11-how-it-works.md) | The same system in plain words, start here |
 
 Supporting material:
 
