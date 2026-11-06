@@ -31,7 +31,11 @@ Supporting material:
 
 Version 1.0 — **frozen for implementation**, 2026-11-06. Scope and the five blockers
 from the review are settled in [ADR-0006](adr/0006-scope-of-the-build.md); nothing else
-may be added without a new ADR. Not yet implemented.
+may be added without a new ADR.
+
+Implemented (spine): `apps/context-service` — deterministic extraction, claim gates,
+temporal resolver, Neo4j loader, CQP compiler, REST and MCP transports. The seven corpus
+traps are green end to end; see [demo.md](demo.md).
 Every document below is a *claim about what we will build*. When implementation
 disagrees with a document, the document is wrong: fix it in the same commit.
 Open findings from [plan-review.html](plan-review.html) are tracked in
