@@ -23,6 +23,12 @@ EXTRACTED = REPO / "data" / "local" / "claims-extracted.jsonl"
 
 @pytest.fixture(scope="module")
 def service():
+    """Claim-side graph only.
+
+    The wipe is scoped to Claim/Span/Entity on purpose: this fixture shares the `neo4j`
+    database with the retrieval index, and Neo4j Community has no second database to put
+    it in. Deleting everything destroyed 1119 embedded chunks on 2026-11-06.
+    """
     from graph.loader import apply_schema, connect, load
     from models.claim import ClaimRecord
     from retrieval.service import ContextService
@@ -47,7 +53,7 @@ def service():
     claims.extend(extract(CORPUS))
     apply_schema(driver)
     with driver.session() as session:
-        session.run("MATCH (n) DETACH DELETE n").consume()
+        session.run("MATCH (n:Claim|Span|Entity) DETACH DELETE n").consume()
     load(driver, claims)
     yield ContextService(driver, CORPUS)
     driver.close()
