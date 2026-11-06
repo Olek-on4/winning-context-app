@@ -1,14 +1,9 @@
-# AGENTS.md
+# Et&T - Etymology & Translation
 
-Project rules for `winning-context-app`. Global rules in `~/.agents/AGENTS.md` still
-apply; this file only adds project-local constraints. Read it fully before your first
-edit. If a rule here blocks the task you were given, say so — do not route around it.
-
-## What this project is
-
-A Context Service over the AT&T "Northstar Equipment" corpus. It ingests the corpus,
-extracts time-stamped claims with evidence, resolves contradictions, and answers
-context queries with citations back to source files.
+A Context Service over various types of engineering data with AT&T "Northstar Equipment" test dataset.
+It ingests the corpus, extracts time-stamped claims with evidence, resolves contradictions, and answers
+context queries with citations back to source files. Queries are excuted through multi-layer index
+and returns relevant structured data.
 
 **Goal is an evidence-backed answer, not a plausible one.** Every claim returned must
 point at a corpus file and line. The corpus is seeded with stale documents and false

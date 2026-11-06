@@ -17,14 +17,20 @@ Read in order. Each document is load-bearing; there is no overview-of-the-overvi
 | 07 | [api-and-mcp.md](07-api-and-mcp.md) | How agents and humans connect |
 | 08 | [delivery-plan.md](08-delivery-plan.md) | Who builds what, in what order, in 5 hours |
 | 09 | [evaluation.md](09-evaluation.md) | How we know it works, and what it cannot do |
+| 10 | [workstreams.md](10-workstreams.md) | Who builds what, and what each lane hands over |
 
 Supporting material:
 
 - [adr/](adr/) — decisions with their alternatives and trade-offs.
 - [research/sources.md](research/sources.md) — annotated bibliography behind the design.
+- [plan-review.html](plan-review.html) — visual review of this design: pillars, mechanics,
+  the five-hour timeline, and the findings that must close before implementation.
+  Open it in a browser; every card and table row is annotatable.
 
 ## Status
 
 Version 0.1 — design frozen for implementation, 2026-11-06. Not yet implemented.
 Every document below is a *claim about what we will build*. When implementation
 disagrees with a document, the document is wrong: fix it in the same commit.
+Open findings from [plan-review.html](plan-review.html) are tracked in
+[10 — workstreams](10-workstreams.md#who-owns-which-review-finding).

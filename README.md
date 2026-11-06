@@ -26,7 +26,24 @@ plan compiled to parameterised Cypher — the model never writes a query.
 - [docs/03-ontology.md](docs/03-ontology.md) — how knowledge is represented
 - [docs/04-temporal-model.md](docs/04-temporal-model.md) — how validity is decided
 - [docs/08-delivery-plan.md](docs/08-delivery-plan.md) — four developers, five hours
+- [docs/10-workstreams.md](docs/10-workstreams.md) — who builds what
+- [docs/plan-review.html](docs/plan-review.html) — visual review of the plan: pillars, mechanics, findings
 - [docs/adr/](docs/adr/) — decisions and their rejected alternatives
+
+## Who builds what
+
+Four lanes, one owner each, four frozen contracts between them
+([detail](docs/10-workstreams.md)):
+
+| Lane | Owns | Hands over |
+|---|---|---|
+| **Extraction** | `ingest/` | `claims.jsonl` passing the schema, span and ontology gates |
+| **Core** | `graph/`, `infra/neo4j/` | a resolved graph where status and time are decided |
+| **Search** | `retrieval/` | question → validated CQP → parameterised Cypher → answer envelope |
+| **MCP / API** | `api/`, `mcp/`, `tests/golden/` | REST + three MCP tools, and the seven-trap golden set |
+
+Only two waits exist (extraction→core, core→search) and both consume a file, not a
+running service.
 
 ## Layout
 
@@ -59,7 +76,7 @@ git submodule update --recursive
 ## Corpus facts
 
 - Source of truth: `vendor/att-hackathon-task` (MIT licensed, fictional organization),
-  pinned at `612cc0b`. 374 files, 3.3 MB.
+  pinned at `612cc0b`. 373 tracked files, 3.3 MB.
 - Main material: TypeScript/Python/Java apps, `docs/`, `wiki/`, `meeting-notes/`,
   `issues/`, `incidents/`, `releases/`, `api-specs/`, `diagrams/`.
 - It contains deliberate contradictions, superseded documents and false joins.

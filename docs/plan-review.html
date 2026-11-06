@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="en" data-theme="luxury">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plan review — Northstar Context Service v0.1</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/daisyui.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/themes.css">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.2.4/dist/index.global.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  :where(.grid, .flex) > *, :where([style*="display: grid"], [style*="display:grid"], [style*="display: flex"], [style*="display:flex"]) > * { min-width: 0; }
+  :where(p, h1, h2, h3, h4, h5, h6, li, dd, blockquote, figcaption, td, th, .badge, .label) { overflow-wrap: anywhere; }
+  :where(img, svg, video, canvas, iframe) { max-width: 100%; height: auto; }
+  .rv-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .8rem; }
+  .rv-mermaid { background: color-mix(in oklch, var(--color-base-200) 60%, transparent); border-radius: .75rem; padding: 1rem; overflow-x: auto; }
+  .rv-mermaid .mermaid { display: flex; justify-content: center; }
+  .rv-rule { border-left: 3px solid var(--color-primary); padding-left: .75rem; }
+  .rv-eq { display: inline-block; padding: 0 .4rem; border-radius: .25rem; background: color-mix(in oklch, var(--color-base-content) 8%, transparent); }
+  .rv-num { font-variant-numeric: tabular-nums; }
+  /* 5-hour track: dashed marker at 40% (CP1), solid at 75% (freeze) */
+  .rv-track {
+    position: relative; height: 0.65rem; border-radius: .2rem;
+    background:
+      linear-gradient(to right, transparent calc(40% - 1px), color-mix(in oklch, var(--color-warning) 60%, transparent) calc(40% - 1px), color-mix(in oklch, var(--color-warning) 60%, transparent) calc(40% + 1px), transparent calc(40% + 1px)),
+      linear-gradient(to right, transparent calc(75% - 1px), color-mix(in oklch, var(--color-error) 80%, transparent) calc(75% - 1px), color-mix(in oklch, var(--color-error) 80%, transparent) calc(75% + 1px), transparent calc(75% + 1px)),
+      color-mix(in oklch, var(--color-base-content) 8%, transparent);
+  }
+  .rv-bar { position: absolute; top: 0; bottom: 0; border-radius: .2rem; background: var(--color-primary); }
+</style>
+</head>
+<body class="bg-base-100 text-base-content">
+
+<main class="mx-auto w-full max-w-7xl px-4 py-8 lg:px-10 lg:py-12 flex flex-col gap-10">
+
+  <!-- ============ HERO ============ -->
+  <header class="flex flex-col gap-4">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="badge badge-primary badge-sm">plan review</span>
+      <span class="badge badge-ghost badge-sm">docs v0.1 · frozen 2026-11-06</span>
+      <span class="badge badge-ghost badge-sm">corpus 612cc0b · 373 tracked files</span>
+      <span class="badge badge-outline badge-sm">reviewed against source, not the summary</span>
+    </div>
+    <h1 class="text-3xl lg:text-5xl font-bold leading-tight">Northstar Context Service — the plan, and the four things that will bite</h1>
+    <p class="max-w-4xl text-base-content/80 leading-relaxed">
+      Eleven design documents (2 633 lines) describe an evidence-backed, time-aware context service over the
+      AT&amp;T corpus. This page is the review: the six pillars it actually rests on, the machine that makes
+      claims trustworthy, the queries it wins, who builds which lane, and the concrete places where the
+      documents disagree with the corpus or with their own five-hour budget.
+    </p>
+  </header>
+
+  <!-- ============ VERDICT ============ -->
+  <section class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="card bg-base-200 border border-base-content/10">
+      <div class="card-body p-5 gap-1">
+        <div class="text-xs uppercase tracking-wider text-base-content/50">Design quality</div>
+        <div class="text-2xl font-bold text-success">Strong</div>
+        <div class="text-sm text-base-content/70">Every layer traces to a named corpus trap. Refusals are explicit.</div>
+      </div>
+    </div>
+    <div class="card bg-base-200 border border-base-content/10">
+      <div class="card-body p-5 gap-1">
+        <div class="text-xs uppercase tracking-wider text-base-content/50">Schedule fit</div>
+        <div class="text-2xl font-bold text-error">Zero slack</div>
+        <div class="text-sm text-base-content/70">Two workstreams end at or past the feature freeze.</div>
+      </div>
+    </div>
+    <div class="card bg-base-200 border border-base-content/10">
+      <div class="card-body p-5 gap-1">
+        <div class="text-xs uppercase tracking-wider text-base-content/50">Internal consistency</div>
+        <div class="text-2xl font-bold text-warning">3 drifts</div>
+        <div class="text-sm text-base-content/70">Tool count, reranker, and one citation that fails its own gate.</div>
+      </div>
+    </div>
+    <div class="card bg-base-200 border border-base-content/10">
+      <div class="card-body p-5 gap-1">
+        <div class="text-xs uppercase tracking-wider text-base-content/50">Biggest unknown</div>
+        <div class="text-2xl font-bold text-warning">§3 / §4</div>
+        <div class="text-sm text-base-content/70">The pack's implementation hint and deliverable were never photographed.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PILLARS ============ -->
+  <section class="flex flex-col gap-4">
+    <div>
+      <h2 class="text-2xl font-bold">Five pillars, one thesis</h2>
+      <p class="mt-1 text-base-content/70 max-w-3xl">
+        Thesis: <em>a context service is not retrieval over a repository — it is an evidence graph with time on
+        every edge.</em> Each pillar is a refusal, which is why the design is defensible under questioning.
+        <span class="rv-mono text-base-content/50">docs/02-architecture.md:5-6</span>
+      </p>
+    </div>
+
+    <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <article class="card bg-base-200 border border-base-content/10">
+        <div class="card-body p-5 gap-2">
+          <div class="flex items-center gap-2"><span class="badge badge-primary badge-sm">1</span><h3 class="font-semibold">Evidence before inference</h3></div>
+          <p class="text-sm">Refuses to keep a claim whose quoted excerpt is not literally in the file at the cited lines. Gate 2 drops, never repairs.</p>
+          <p class="rv-mono text-base-content/50">03-ontology.md:198-201 · ADR-0005</p>
+        </div>
+      </article>
+      <article class="card bg-base-200 border border-base-content/10">
+        <div class="card-body p-5 gap-2">
+          <div class="flex items-center gap-2"><span class="badge badge-primary badge-sm">2</span><h3 class="font-semibold">Time on every assertion</h3></div>
+          <p class="text-sm">Four timestamps per claim; a relationship without a validity window is a schema violation, not a shortcut.</p>
+          <p class="rv-mono text-base-content/50">04-temporal-model.md:16-22 · AGENTS.md:41-43</p>
+        </div>
+      </article>
+      <article class="card bg-base-200 border border-base-content/10">
+        <div class="card-body p-5 gap-2">
+          <div class="flex items-center gap-2"><span class="badge badge-primary badge-sm">3</span><h3 class="font-semibold">Claims, not facts</h3></div>
+          <p class="text-sm">Reified assertions with polarity and modality. A proposal can exist in the graph without ever becoming true, and contradiction never deletes.</p>
+          <p class="rv-mono text-base-content/50">ADR-0002 · 03-ontology.md:58-68</p>
+        </div>
+      </article>
+      <article class="card bg-base-200 border border-base-content/10">
+        <div class="card-body p-5 gap-2">
+          <div class="flex items-center gap-2"><span class="badge badge-primary badge-sm">4</span><h3 class="font-semibold">Conservative identity</h3></div>
+          <p class="text-sm">Merge only on declared identifiers. Resemblance is recorded as <span class="rv-mono">SIMILAR_NAME_TO</span> and reported, never joined.</p>
+          <p class="rv-mono text-base-content/50">03-ontology.md:109-133 · traps T4, T5</p>
+        </div>
+      </article>
+      <article class="card bg-base-200 border border-base-content/10">
+        <div class="card-body p-5 gap-2">
+          <div class="flex items-center gap-2"><span class="badge badge-primary badge-sm">5</span><h3 class="font-semibold">Model proposes, compiler executes</h3></div>
+          <p class="text-sm">The planner fills a JSON-schema-validated query plan. Cypher only ever comes from seven frozen templates.</p>
+          <p class="rv-mono text-base-content/50">ADR-0003 · 06-retrieval.md:14-37</p>
+        </div>
+      </article>
+      <article class="card bg-base-200 border border-base-content/10">
+        <div class="card-body p-5 gap-2">
+          <div class="flex items-center gap-2"><span class="badge badge-primary badge-sm">6</span><h3 class="font-semibold">Doubt is an output field</h3></div>
+          <p class="text-sm"><span class="rv-mono">degraded</span>, <span class="rv-mono">gaps</span>, <span class="rv-mono">conflicts</span>, <span class="rv-mono">DISPUTED</span> and <span class="rv-mono">truncated</span> are returned, not suppressed — including "the planner failed, here is hybrid search".</p>
+          <p class="rv-mono text-base-content/50">06-retrieval.md:158-168, 184-186</p>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============ ARCHITECTURE ============ -->
+  <section class="flex flex-col gap-4">
+    <div>
+      <h2 class="text-2xl font-bold">Architecture, end to end</h2>
+      <p class="mt-1 text-base-content/70 max-w-3xl">
+        One envelope between every stage. Pipelines are allowed to disagree; a single deterministic resolver
+        decides what is currently true. Nothing after the resolver needs to know where a claim came from.
+      </p>
+    </div>
+    <div class="rv-mermaid">
+      <pre class="mermaid">
+flowchart TB
+  C["corpus · 373 files · 8 source types"]:::src
+  W["walker + router · content-hash incremental"]:::core
+  P["six pipelines · code · config · api · schema · prose · diagram"]:::pipe
+  E["ClaimRecord envelope · subject · predicate · object · 4 dates · spans"]:::contract
+  G["three gates · schema · span verbatim · ontology"]:::gate
+  R["resolver · identity · temporal · conflicts · communities"]:::res
+  K[("Neo4j · graph + HNSW + BM25")]:::store
+  Q["planner → CQP → compiler → hybrid → assemble"]:::core
+  X["REST + MCP · same service layer"]:::edge
+
+  C --> W --> P --> E --> G --> R --> K --> Q --> X
+
+  classDef src fill:none,stroke:#8b8b8b,stroke-dasharray:3 3
+  classDef contract stroke-width:3px
+  classDef store stroke-width:3px
+      </pre>
+    </div>
+    <div class="grid gap-3 md:grid-cols-3">
+      <div class="alert alert-sm bg-base-200 border border-base-content/10 text-sm">
+        <span><strong>Why one store.</strong> The traversal-plus-vector query is a single Cypher statement, so the index cannot go stale relative to itself. <span class="rv-mono text-base-content/50">ADR-0001</span></span>
+      </div>
+      <div class="alert alert-sm bg-base-200 border border-base-content/10 text-sm">
+        <span><strong>Why gates before the graph.</strong> A claim that fails a gate is dropped and logged; nothing downstream ever has to distrust its input. <span class="rv-mono text-base-content/50">03:192-206</span></span>
+      </div>
+      <div class="alert alert-sm bg-base-200 border border-base-content/10 text-sm">
+        <span><strong>Why the resolver is alone.</strong> All judgement sits in one deterministic, unit-testable place — which is also what lets four people work in parallel. <span class="rv-mono text-base-content/50">ADR-0002</span></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ LAYERS ============ -->
+  <section class="flex flex-col gap-4">
+    <div>
+      <h2 class="text-2xl font-bold">The four index layers — and which of them ship</h2>
+      <p class="mt-1 text-base-content/70 max-w-3xl">
+        Each layer exists because a query shape needs it. Only L0–L2 are in the five-hour spine; L3 is
+        documented and cut for time (<span class="rv-mono text-base-content/50">08:33 · 09:121-123</span>).
+      </p>
+    </div>
+    <div class="grid gap-3 lg:grid-cols-2">
+      <div class="card bg-base-200 border-l-4 border-l-primary border border-base-content/10">
+        <div class="card-body p-5 gap-1">
+          <div class="flex items-center justify-between gap-2"><h3 class="font-semibold">L0 · Evidence</h3><span class="badge badge-success badge-sm">ships</span></div>
+          <p class="text-sm"><span class="rv-mono">Source · Span · Chunk</span> — vector + full-text indexes. Answers "where exactly does it say that?".</p>
+        </div>
+      </div>
+      <div class="card bg-base-200 border-l-4 border-l-primary border border-base-content/10">
+        <div class="card-body p-5 gap-1">
+          <div class="flex items-center justify-between gap-2"><h3 class="font-semibold">L1 · Claim</h3><span class="badge badge-success badge-sm">ships</span></div>
+          <p class="text-sm">Reified assertions with four dates, status, confidence, <span class="rv-mono">CONTRADICTS</span>. Answers "is this still true, and who disagrees?".</p>
+        </div>
+      </div>
+      <div class="card bg-base-200 border-l-4 border-l-primary border border-base-content/10">
+        <div class="card-body p-5 gap-1">
+          <div class="flex items-center justify-between gap-2"><h3 class="font-semibold">L2 · Entity</h3><span class="badge badge-warning badge-sm">skeleton only</span></div>
+          <p class="text-sm">Materialised <span class="rv-mono">CALLS / READS_FROM / OWNS</span> with the same temporal fields. Grows only where a spine pipeline lands.</p>
+        </div>
+      </div>
+      <div class="card bg-base-200 border-l-4 border-l-base-content/30 border border-base-content/10">
+        <div class="card-body p-5 gap-1">
+          <div class="flex items-center justify-between gap-2"><h3 class="font-semibold">L3 · Topic</h3><span class="badge badge-ghost badge-sm">documented only</span></div>
+          <p class="text-sm">Communities over L2, no LLM, indexed at query time. The piece that keeps query cost flat as the corpus grows.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MECHANICS ============ -->
+  <section class="flex flex-col gap-5">
+    <div>
+      <h2 class="text-2xl font-bold">Essential mechanics — the three machines</h2>
+      <p class="mt-1 text-base-content/70 max-w-3xl">Extraction is deliberately stupid; resolution and querying carry the intelligence.</p>
+    </div>
+
+    <div class="grid gap-5 lg:grid-cols-2">
+      <div class="card bg-base-200 border border-base-content/10">
+        <div class="card-body p-5 gap-3">
+          <h3 class="font-semibold">A · One envelope, three gates</h3>
+          <p class="text-sm">Every pipeline emits the same record type, so a seventh source is a new function and zero edits elsewhere.</p>
+          <pre class="rv-mono bg-base-300/60 rounded-lg p-3 overflow-x-auto leading-relaxed">subject · predicate · object
+polarity  ASSERTS | NEGATES
+modality  FACT DECISION PROPOSAL
+          PLAN HYPOTHESIS PROHIBITION
+valid_from, valid_to, observed_at
+evidence[] ≥1 {path, start_line,
+                end_line, excerpt}
+confidence 0..1 · extractor(+version)</pre>
+          <ul class="text-sm list-disc list-inside space-y-1">
+            <li><strong>Schema gate</strong> — same model is the Ollama <span class="rv-mono">format</span> constraint, so structure is right by construction.</li>
+            <li><strong>Span gate</strong> — excerpt must occur verbatim at the cited lines. Drop, never repair.</li>
+            <li><strong>Ontology gate</strong> — predicate must be in the enum and satisfy declared domain/range.</li>
+          </ul>
+          <p class="rv-mono text-base-content/50">03-ontology.md:192-206 · 05:12-32</p>
+        </div>
+      </div>
+
+      <div class="card bg-base-200 border border-base-content/10">
+        <div class="card-body p-5 gap-3">
+          <h3 class="font-semibold">B · Time is a WHERE clause, not a ranking</h3>
+          <p class="text-sm">
+            Valid vs observed vs recorded is what lets the service say <em>"the wiki was right when written"</em>
+            instead of <em>"the wiki lies"</em>. Three canonical modes: current, point-in-time, full history.
+          </p>
+          <div class="overflow-x-auto">
+            <table class="table table-xs">
+              <thead><tr><th>Status</th><th>Means</th><th>Corpus case</th></tr></thead>
+              <tbody>
+                <tr><td><span class="badge badge-success badge-xs">VALID</span></td><td>true now, best evidence</td><td>SQLite on the stock read path</td></tr>
+                <tr><td><span class="badge badge-warning badge-xs">DEPRECATED</span></td><td>was true, superseded</td><td>Redis read cache · accounts-v1</td></tr>
+                <tr><td><span class="badge badge-info badge-xs">PLANNED</span></td><td>accepted, not yet effective</td><td>warehouse console migration</td></tr>
+                <tr><td><span class="badge badge-ghost badge-xs">PROPOSED</span></td><td>suggested, never accepted</td><td>ADR-004 People SSO</td></tr>
+                <tr><td><span class="badge badge-error badge-xs">DISPUTED</span></td><td>sources conflict, no winner</td><td>SEC-22 suspected authz gap</td></tr>
+                <tr><td><span class="badge badge-neutral badge-xs">UNKNOWN</span></td><td>no usable time signal</td><td>an undated code fact</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="text-sm text-base-content/70">
+            Transitions: <span class="rv-mono">UNKNOWN→VALID</span> (dated + authoritative + uncontested) ·
+            <span class="rv-mono">PROPOSED→PLANNED→VALID</span> (accepted, then effective and corroborated) ·
+            <span class="rv-mono">VALID→DEPRECATED</span> (superseded) ·
+            <span class="rv-mono">VALID→DISPUTED→{VALID|DEPRECATED}</span> (conflict, then resolution by new evidence).
+            <span class="text-warning">The doc's diagram omits every entry edge into PROPOSED and PLANNED</span>, so both nodes float in the render.
+          </p>
+          <p class="rv-mono text-base-content/50">04-temporal-model.md:44-56, 58-72</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card bg-base-200 border border-base-content/10">
+      <div class="card-body p-5 gap-3">
+        <h3 class="font-semibold">C · The resolver in seven steps — nothing is merged on resemblance</h3>
+        <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4 text-sm">
+          <div class="rounded-lg bg-base-300/50 p-3"><span class="badge badge-xs badge-primary mb-1">1</span><br>Score each claim: <span class="rv-mono">authority × time_conf × extractor_conf</span></div>
+          <div class="rounded-lg bg-base-300/50 p-3"><span class="badge badge-xs badge-primary mb-1">2</span><br>Explicit supersession wins over inference; close the earlier <span class="rv-mono">valid_to</span></div>
+          <div class="rounded-lg bg-base-300/50 p-3"><span class="badge badge-xs badge-primary mb-1">3</span><br>A later <span class="rv-mono">NEGATES</span> closes every open <span class="rv-mono">ASSERTS</span> for the same triple</div>
+          <div class="rounded-lg bg-base-300/50 p-3"><span class="badge badge-xs badge-primary mb-1">4</span><br>An active <span class="rv-mono">PROHIBITION</span> blocks promotion regardless of score</div>
+          <div class="rounded-lg bg-base-300/50 p-3"><span class="badge badge-xs badge-primary mb-1">5</span><br>Rank survivors: winner <span class="rv-mono">VALID</span>, older losers <span class="rv-mono">DEPRECATED</span></div>
+          <div class="rounded-lg bg-base-300/50 p-3"><span class="badge badge-xs badge-primary mb-1">6</span><br>Ties within 0.15 → both <span class="rv-mono">DISPUTED</span>. Never a coin flip.</div>
+          <div class="rounded-lg bg-base-300/50 p-3"><span class="badge badge-xs badge-primary mb-1">7</span><br>Independence across source types corroborates: <span class="rv-mono">1 − ∏(1 − cᵢ)</span></div>
+          <div class="rounded-lg bg-base-300/50 p-3 border border-warning/40"><span class="badge badge-xs badge-warning mb-1">cap</span><br>Bound at ~10⁵ claims: quadratic per subject. Named, not hidden.</div>
+        </div>
+        <p class="rv-mono text-base-content/50">04-temporal-model.md:101-129 · scaling cap: 02:221-224</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PRACTICAL USES ============ -->
+  <section class="flex flex-col gap-4">
+    <div>
+      <h2 class="text-2xl font-bold">What it actually does for a person</h2>
+      <p class="mt-1 text-base-content/70 max-w-3xl">
+        Six surfaces, all over the same service layer. The two negative cases are the ones that prove
+        trustworthiness — refusing a plausible join is harder than finding one.
+      </p>
+    </div>
+    <div class="overflow-x-auto rounded-box border border-base-content/10">
+      <table class="table table-zebra table-sm md:table-md">
+        <thead>
+          <tr><th class="w-1/4">Situation</th><th class="w-1/4">Ask</th><th class="w-1/4">Surface</th><th>What the engineer gets</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Agent is about to reintroduce a removed cache</td>
+            <td class="rv-mono">"add a cache to the stock read path"</td>
+            <td class="rv-mono">context_search</td>
+            <td>Declines. ADR-003 cited; wiki claim returned as <span class="badge badge-xs badge-ghost">DEPRECATED</span> with the supersession chain.</td>
+          </tr>
+          <tr>
+            <td>Quarterly documentation debt</td>
+            <td>"which wiki pages has the repo outgrown?"</td>
+            <td class="rv-mono">/v1/gaps · full-history</td>
+            <td>A list, not an inference — wiki claims with a closed <span class="rv-mono">valid_to</span> and the record that closed it.</td>
+          </tr>
+          <tr>
+            <td>Post-incident reconstruction</td>
+            <td class="rv-mono">{as_of: "2026-03-01"}</td>
+            <td class="rv-mono">any intent</td>
+            <td>Same graph, earlier clock: "yes, Redis" — architecture as it was during the outage.</td>
+          </tr>
+          <tr>
+            <td>"What breaks if I change this?"</td>
+            <td>impact of change on X</td>
+            <td class="rv-mono">context_impact_of_change</td>
+            <td>Reverse-dependency closure plus the risks attached to the affected set.</td>
+          </tr>
+          <tr>
+            <td>Writing a new handler</td>
+            <td>"what's unsafe in order lookup?"</td>
+            <td class="rv-mono">context_risks</td>
+            <td>The prohibition, not just the finding: CWE-639 shape, spot, and the pattern to avoid.</td>
+          </tr>
+          <tr class="bg-base-300/40">
+            <td><strong>Negative</strong> — accounts and employees share emails</td>
+            <td>"can I join them by email?"</td>
+            <td class="rv-mono">context_explain_relationship</td>
+            <td>"No — explicit mapping only." Returns <span class="rv-mono">SIMILAR_NAME_TO</span>, refuses identity. <span class="rv-mono text-base-content/50">G4</span></td>
+          </tr>
+          <tr class="bg-base-300/40">
+            <td><strong>Negative</strong> — two classes named PaymentService</td>
+            <td>"is PaymentService in the payment flow?"</td>
+            <td class="rv-mono">context_search</td>
+            <td>"No — the archive one is a voucher calculator, outside the workspace." <span class="rv-mono text-base-content/50">G5</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="rv-mermaid">
+      <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant U as IDE agent
+    participant M as MCP tool
+    participant P as Planner (local model)
+    participant C as CQP compiler
+    participant N as Neo4j
+    participant A as Assembler
+    U->>M: does stock use a redis cache?
+    M->>P: question only — no retrieved text
+    P-->>M: CQP intent=STATE_OF anchor=inventory-service
+    M->>C: validate against JSON Schema
+    C->>N: hybrid seed (vector + BM25) → anchor
+    C->>N: template T-STATE-OF + time filter
+    N-->>A: READS_FROM(Redis) 2026-01→2026-06-04 DEPRECATED
+    N-->>A: READS_FROM(SQLite) 2026-06-04→∞ VALID
+    A-->>M: answer + citations + supersession chain
+    M-->>U: No — removed 2026-06-04 by ADR-003
+      </pre>
+    </div>
+  </section>
+
+  <!-- ============ SCHEDULE ============ -->
+  <section class="flex flex-col gap-4">
+    <div>
+      <h2 class="text-2xl font-bold">The five-hour constraint, drawn honestly</h2>
+      <p class="mt-1 max-w-3xl text-base-content/70">
+        The plan is the scoring-optimal move — 45 of 100 points reward explained reasoning, not built features.
+        But the critical path has no slack: workstream C ends exactly at the freeze, and workstream B's last
+        task ends <em>after</em> it.
+      </p>
+    </div>
+    <!-- timeline: bars are % of the 5h budget; CP1 at 40%, freeze at 75% -->
+    <div class="card bg-base-200 border border-base-content/10">
+      <div class="card-body p-5 gap-3">
+        <div class="flex flex-wrap items-center gap-3 text-xs text-base-content/60">
+          <span class="flex items-center gap-1"><span class="inline-block w-4 h-2 rounded-sm bg-primary"></span> normal</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-4 h-2 rounded-sm bg-error"></span> critical path</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-4 h-2 rounded-sm bg-base-content/30"></span> stretch</span>
+          <span class="ml-auto">timeline as written in docs/08 · dashed = CP1 02:00 · solid = freeze 03:45 · docs/10 moves the freeze to 03:30</span>
+        </div>
+
+        <div class="flex flex-col gap-1 text-sm">
+          <div class="grid gap-2" style="grid-template-columns: 10rem minmax(0,1fr)">
+            <span class="text-base-content/60 text-xs pt-1">A · ingest</span><span></span>
+            <span class="text-xs pt-1">walker + router</span><span class="rv-track"><span class="rv-bar" style="left:10%;width:15%"></span></span>
+            <span class="text-xs pt-1">ConfigPipeline</span><span class="rv-track"><span class="rv-bar" style="left:25%;width:20%"></span></span>
+            <span class="text-xs pt-1">SchemaPipeline</span><span class="rv-track"><span class="rv-bar" style="left:45%;width:15%"></span></span>
+            <span class="text-xs pt-1 text-base-content/50">CodePipeline · stretch</span><span class="rv-track"><span class="rv-bar" style="left:60%;width:20%;opacity:.45"></span></span>
+
+            <span class="text-base-content/60 text-xs pt-1">B · knowledge</span><span></span>
+            <span class="text-xs pt-1">Neo4j schema + loader</span><span class="rv-track"><span class="rv-bar" style="left:10%;width:20%"></span></span>
+            <span class="text-xs pt-1">Entity resolution</span><span class="rv-track"><span class="rv-bar" style="left:30%;width:15%"></span></span>
+            <span class="text-xs pt-1">Temporal resolver</span><span class="rv-track"><span class="rv-bar bg-error" style="left:45%;width:25%"></span></span>
+            <span class="text-xs pt-1">Conflict detection</span><span class="rv-track"><span class="rv-bar bg-error" style="left:70%;width:10%"></span></span>
+
+            <span class="text-base-content/60 text-xs pt-1">C · retrieval</span><span></span>
+            <span class="text-xs pt-1">Embeddings + hybrid</span><span class="rv-track"><span class="rv-bar" style="left:10%;width:20%"></span></span>
+            <span class="text-xs pt-1">CQP validator + compiler</span><span class="rv-track"><span class="rv-bar bg-error" style="left:30%;width:25%"></span></span>
+            <span class="text-xs pt-1">Templates + assembler</span><span class="rv-track"><span class="rv-bar bg-error" style="left:55%;width:20%"></span></span>
+
+            <span class="text-base-content/60 text-xs pt-1">D · edge + proof</span><span></span>
+            <span class="text-xs pt-1">Diagram fixtures</span><span class="rv-track"><span class="rv-bar" style="left:10%;width:10%"></span></span>
+            <span class="text-xs pt-1">Narrative header pass</span><span class="rv-track"><span class="rv-bar" style="left:20%;width:15%"></span></span>
+            <span class="text-xs pt-1">FastAPI + MCP</span><span class="rv-track"><span class="rv-bar bg-error" style="left:35%;width:25%"></span></span>
+            <span class="text-xs pt-1">Golden set + demo script</span><span class="rv-track"><span class="rv-bar" style="left:60%;width:15%"></span></span>
+          </div>
+          <div class="grid gap-2 text-[.65rem] text-base-content/40 mt-1" style="grid-template-columns: 10rem minmax(0,1fr)">
+            <span></span><span class="flex justify-between"><span>00:00</span><span>02:00</span><span>03:45</span><span>05:00</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="grid gap-3 md:grid-cols-3">
+      <div class="alert alert-error alert-sm text-sm"><span><strong>C ends 03:45 = freeze.</strong> 195 min of retrieval work with zero buffer, on the demo-critical path.</span></div>
+      <div class="alert alert-error alert-sm text-sm"><span><strong>B ends 04:00 &gt; freeze.</strong> Conflict detection runs 15 min past the hard stop the plan itself declares.</span></div>
+      <div class="alert alert-warning alert-sm text-sm"><span><strong>D ends 04:15 = rehearsal start.</strong> The MCP server — the 15-point integration — is last, unprotected.</span></div>
+    </div>
+  </section>
+
+  <!-- ============ WORKSTREAMS ============ -->
+  <section class="flex flex-col gap-4">
+    <div>
+      <h2 class="text-2xl font-bold">Who builds what — four lanes</h2>
+      <p class="mt-1 max-w-3xl text-base-content/70">
+        One owner per lane, four contracts between them, and only two real waits — both
+        of which consume a file, not a running service. Detail and done-criteria:
+        <a class="link link-hover rv-mono" href="10-workstreams.md">10-workstreams.md</a>.
+      </p>
+    </div>
+
+    <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div class="card bg-base-200 border-t-4 border-t-primary border border-base-content/10">
+        <div class="card-body p-4 gap-1">
+          <div class="text-xs uppercase tracking-wider text-base-content/50">A · extraction</div>
+          <h3 class="font-semibold">Walker, router, deterministic pipelines</h3>
+          <p class="text-sm text-base-content/70">Emits a file. Never opens Neo4j. Owns the gate-2 mechanism: line-numbered chunks, derived <span class="rv-mono">end_line</span>.</p>
+          <p class="rv-mono text-xs text-base-content/50 mt-auto pt-2">ingest/ · done: claims.jsonl passes gates 1–3</p>
+        </div>
+      </div>
+      <div class="card bg-base-200 border-t-4 border-t-secondary border border-base-content/10">
+        <div class="card-body p-4 gap-1">
+          <div class="text-xs uppercase tracking-wider text-base-content/50">B · core</div>
+          <h3 class="font-semibold">Store, loader, resolver, time</h3>
+          <p class="text-sm text-base-content/70">Every judgement about what is currently true. Owns the Neo4j edition decision and the date-precision convention.</p>
+          <p class="rv-mono text-xs text-base-content/50 mt-auto pt-2">graph/ infra/ · done: T1 resolves, loader idempotent</p>
+        </div>
+      </div>
+      <div class="card bg-base-200 border-t-4 border-t-accent border border-base-content/10">
+        <div class="card-body p-4 gap-1">
+          <div class="text-xs uppercase tracking-wider text-base-content/50">C · search</div>
+          <h3 class="font-semibold">Embeddings, hybrid, CQP, assembler</h3>
+          <p class="text-sm text-base-content/70">Longest chain, so the compiler and seven templates are written <em>before</em> the event. Degrades to hybrid with <span class="rv-mono">degraded: true</span>.</p>
+          <p class="rv-mono text-xs text-base-content/50 mt-auto pt-2">retrieval/ · done: tests/cqp green, no model</p>
+        </div>
+      </div>
+      <div class="card bg-base-200 border-t-4 border-t-info border border-base-content/10">
+        <div class="card-body p-4 gap-1">
+          <div class="text-xs uppercase tracking-wider text-base-content/50">D · MCP / API</div>
+          <h3 class="font-semibold">Two transports, fixtures, proof, demo</h3>
+          <p class="text-sm text-base-content/70">Fixtures at minute 20 unblock C. Three tools ship, six are documented — and that is said out loud.</p>
+          <p class="rv-mono text-xs text-base-content/50 mt-auto pt-2">api/ mcp/ tests/golden/ · done: 7 rows print</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="rv-mermaid">
+      <pre class="mermaid">
+flowchart LR
+  K["00:00 · contracts + fixtures"]:::k
+  K --> A["A · extraction"]:::a
+  K --> B["B · core"]:::b
+  K --> C["C · search"]:::c
+  K --> D["D · MCP/API"]:::d
+  A --> B --> C --> D
+  D -. "fixtures" .-> C
+      </pre>
+    </div>
+
+    <div class="overflow-x-auto rounded-box border border-base-content/10">
+      <table class="table table-xs">
+        <thead><tr><th>Checkpoint</th><th>Gate</th><th>Fails if</th></tr></thead>
+        <tbody>
+          <tr><td class="rv-mono">00:20</td><td>contracts frozen · fixtures on disk · Neo4j up</td><td>anyone is still designing an interface</td></tr>
+          <tr><td class="rv-mono">02:00</td><td>one pipeline → graph → <span class="rv-mono">/v1/query</span> answers T1 from real data</td><td>the path is still fixture-only</td></tr>
+          <tr><td class="rv-mono">03:30</td><td>feature freeze · golden set run and printed</td><td>someone is mid-refactor</td></tr>
+          <tr><td class="rv-mono">03:30–04:15</td><td>rehearsal on the demo machine</td><td>rehearsal starts on a laptop that works</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ FINDINGS ============ -->
+  <section class="flex flex-col gap-4">
+    <div>
+      <h2 class="text-2xl font-bold">Findings</h2>
+      <p class="mt-1 max-w-3xl text-base-content/70">
+        Each line was checked against the corpus at <span class="rv-mono">612cc0b</span> or against the
+        document it cites. Severity is about demo risk, not taste.
+      </p>
+    </div>
+    <div class="overflow-x-auto rounded-box border border-base-content/10">
+      <table class="table table-zebra table-sm">
+        <thead>
+          <tr><th class="w-16">Sev</th><th class="w-1/3">Finding</th><th class="w-1/3">Evidence</th><th>Fix</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge badge-error badge-sm">block</span></td>
+            <td>Pack §3 <em>Implementation Hint</em> and §4 <em>Target Deliverable</em> were never captured, yet the docs are declared frozen for implementation.</td>
+            <td class="rv-mono text-xs">00-brief.md:105-114<br>README.md:28</td>
+            <td>Get both sections before the 00:00 contract freeze; diff §4 against the must-ship column.</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-error badge-sm">block</span></td>
+            <td>Critical path has zero slack and one task overruns the declared feature freeze.</td>
+            <td class="rv-mono text-xs">08:67-96 (gantt), 08:39</td>
+            <td>Pre-build the CQP compiler + 7 templates + golden fixtures <em>before</em> the event — they need no corpus, no Neo4j, no model.</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-error badge-sm">block</span></td>
+            <td>Gate 2 is the whole trust story, but the mechanism for getting exact line numbers out of a 7–8B model is unspecified.</td>
+            <td class="rv-mono text-xs">05:142-153<br>03:198-201</td>
+            <td>Feed line-numbered chunk text; require <span class="rv-mono">excerpt + start_line</span>; derive <span class="rv-mono">end_line</span> from the match offset. Then the gate is exact and the drop rate is measurable.</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-error badge-sm">block</span></td>
+            <td>Month-precision dates have no normalisation rule, and the time-travel demo depends on one.</td>
+            <td class="rv-mono text-xs">04:138 (2026-06)<br>08:164 (as_of 2026-03-01)</td>
+            <td>Declare the convention (first day of period) and store <span class="rv-mono">date_precision</span>; otherwise <span class="rv-mono">valid_from ≤ t</span> is a coin flip.</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-error badge-sm">block</span></td>
+            <td>Two schema constraints are Enterprise-only in Neo4j 5, but ADR-0001 specifies "Neo4j 5.x" without an edition. On Community, <span class="rv-mono">schema.cypher</span> fails at startup and the loader never runs.</td>
+            <td class="rv-mono text-xs">03:180-183<br>(<span class="rv-mono">REQUIRE … IS NOT NULL</span>)<br>ADR-0001 · Neo4j Cypher Manual 5: "property existence constraints — Enterprise Edition"</td>
+            <td>Either pin <span class="rv-mono">neo4j:5-enterprise</span> with a licence note, or drop the two existence constraints and enforce non-null in the pydantic model plus a loader assertion. Uniqueness constraints are Community-safe.</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-warning badge-sm">warn</span></td>
+            <td>Tool count drifts: six tools documented, three in the must-ship column, six in the token-cost target.</td>
+            <td class="rv-mono text-xs">07:36-46<br>08:39<br>09:41</td>
+            <td>Freeze three for the demo; move the metric to "three tools &lt; 1 200 tokens" and keep six as forward view.</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-warning badge-sm">warn</span></td>
+            <td>Documented retrieval includes a cross-encoder reranker that is explicitly cut, while recall@10 ≥ 0.9 is still targeted.</td>
+            <td class="rv-mono text-xs">06:100-101<br>08:33<br>09:38</td>
+            <td>State the shipped pipeline as vector + BM25 + RRF and set the recall target for that pipeline, measured before the demo.</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-warning badge-sm">warn</span></td>
+            <td>The shipped spine and the documented architecture are indistinguishable to a reader inside most documents.</td>
+            <td class="rv-mono text-xs">08:28-40 vs 02, 03, 06, 07</td>
+            <td>Add a one-line <span class="rv-mono">spine: yes | no</span> marker at the top of each behavioural section.</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-info badge-sm">defect</span></td>
+            <td>A worked example cites a line range that does not contain the fact it claims — the design violating its own gate 2.</td>
+            <td class="rv-mono text-xs">06:140 cites app.py:41-58;<br>the read path is 61-85</td>
+            <td>Change to <span class="rv-mono">apps/inventory-service/app.py:61-85</span>.</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-info badge-sm">defect</span></td>
+            <td>Status-lattice diagram has no entry edge into <span class="rv-mono">PROPOSED</span> or <span class="rv-mono">PLANNED</span>; both nodes float in the Mermaid render.</td>
+            <td class="rv-mono text-xs">04:44-56</td>
+            <td>Add the three entry edges: <span class="rv-mono">[*] → PROPOSED</span>, <span class="rv-mono">[*] → PLANNED</span>, <span class="rv-mono">[*] → UNKNOWN</span>.</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-info badge-sm">defect</span></td>
+            <td>Corpus stated as 374 files; <span class="rv-mono">git ls-files</span> reports 373 (the 374th is the submodule's <span class="rv-mono">.git</span> file).</td>
+            <td class="rv-mono text-xs">01:8</td>
+            <td>Use 373 tracked / 374 on disk, or say "≈370".</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-ghost badge-sm">nit</span></td>
+            <td>A behavioural rule ships with an unresolved aside in parentheses.</td>
+            <td class="rv-mono text-xs">AGENTS.md:65-66</td>
+            <td>Resolve or delete the "ponytail" parenthetical; the rule reads as a draft.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ WHAT I VERIFIED ============ -->
+  <section class="flex flex-col gap-3">
+    <h2 class="text-2xl font-bold">What this review checked, and what it did not</h2>
+    <div class="grid gap-4 md:grid-cols-2">
+      <div class="card bg-base-200 border border-base-content/10">
+        <div class="card-body p-5 gap-2">
+          <h3 class="font-semibold text-success">Verified against source</h3>
+          <ul class="text-sm list-disc list-inside space-y-1">
+            <li>Corpus citations exist and say what is claimed: <span class="rv-mono">wiki/inventory-service.md:5</span>, <span class="rv-mono">docs/adr/003-stock-cache.md:6</span>, <span class="rv-mono">migrations/002-account-tiers.sql:1-2</span>, <span class="rv-mono">issues/SEC-22.md:3-7</span>, <span class="rv-mono">docs/design/people-account-link.md:6</span>, <span class="rv-mono">archive/conference-registration/README.md:5</span>, <span class="rv-mono">config/ports.json</span>.</li>
+            <li>Trap T1 resolves mechanically: ADR-003 negates, wiki asserts, release corroborates.</li>
+            <li>File counts, extension mix, five corpus ADRs, twelve apps, thirteen compose services.</li>
+            <li><span class="rv-mono">apps/inventory-service/app.py</span> — the SQLite read path is lines 61–85, not 41–58.</li>
+            <li>Neo4j 5 Cypher Manual: property existence and key constraints are marked <em>Enterprise Edition</em>; uniqueness constraints are not.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card bg-base-200 border border-base-content/10">
+        <div class="card-body p-5 gap-2">
+          <h3 class="font-semibold text-warning">Not verified</h3>
+          <ul class="text-sm list-disc list-inside space-y-1">
+            <li>No code exists yet, so no runtime claim here is measured — latency, recall and extraction precision targets are all aspirational.</li>
+            <li>Local-model behaviour on this corpus (drop rate under gate 2) is unknown and load-bearing.</li>
+            <li>The pack itself: §3 and §4 were unavailable to the authors and to me.</li>
+            <li>Research citations in <span class="rv-mono">docs/research/sources.md</span> were not re-fetched.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="border-t border-base-content/10 pt-4 text-xs text-base-content/50 flex flex-wrap gap-x-4 gap-y-1">
+    <span>Review scope: docs/00–10, docs/adr/0001–0005, AGENTS.md, corpus at 612cc0b</span>
+    <span>·</span>
+    <span>Sources are <span class="rv-mono">path:line</span> in the repo</span>
+    <span>·</span>
+    <span>Annotate any card, row or claim to queue a change</span>
+  </footer>
+</main>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.15.0/dist/mermaid.esm.min.mjs";
+
+  const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  const paint = document.createElement("canvas").getContext("2d");
+  function toRgba(color) {
+    paint.clearRect(0, 0, 1, 1);
+    paint.fillStyle = "#000";
+    paint.fillStyle = color;
+    paint.fillRect(0, 0, 1, 1);
+    return paint.getImageData(0, 0, 1, 1).data;
+  }
+  function compositeRgba(foreground, background) {
+    const fa = foreground[3] / 255, ba = background[3] / 255;
+    const alpha = fa + ba * (1 - fa);
+    if (alpha === 0) return [0, 0, 0, 0];
+    return [
+      (foreground[0] * fa + background[0] * ba * (1 - fa)) / alpha,
+      (foreground[1] * fa + background[1] * ba * (1 - fa)) / alpha,
+      (foreground[2] * fa + background[2] * ba * (1 - fa)) / alpha,
+      alpha * 255,
+    ];
+  }
+  function pageIsDark() {
+    const root = document.documentElement;
+    const rootBackground = toRgba(getComputedStyle(root).backgroundColor);
+    const bodyBackground = document.body ? toRgba(getComputedStyle(document.body).backgroundColor) : [0, 0, 0, 0];
+    const [r, g, b, a] = compositeRgba(bodyBackground, rootBackground);
+    if (a > 0) return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5;
+    const colorScheme = getComputedStyle(root).colorScheme;
+    if (colorScheme.includes("dark") && !colorScheme.includes("light")) return true;
+    if (colorScheme.includes("light") && !colorScheme.includes("dark")) return false;
+    return darkQuery.matches;
+  }
+
+  const diagrams = [...document.querySelectorAll(".mermaid")].map((el) => ({ el, src: el.textContent }));
+  let applied, rendering = false, queued = false;
+  function queueRender() {
+    queued = true;
+    if (rendering) return;
+    void render();
+  }
+  async function render() {
+    rendering = true;
+    try {
+      while (queued) {
+        queued = false;
+        const theme = pageIsDark() ? "dark" : "default";
+        if (theme === applied) continue;
+        mermaid.initialize({ startOnLoad: false, theme, securityLevel: "strict" });
+        for (const { el, src } of diagrams) {
+          el.removeAttribute("data-processed");
+          el.textContent = src;
+        }
+        try { await mermaid.run({ nodes: diagrams.map((d) => d.el) }); }
+        catch (error) { console.error("Mermaid render failed:", error); return; }
+        applied = theme;
+      }
+    } finally {
+      rendering = false;
+      if (queued) queueRender();
+    }
+  }
+  if (document.readyState === "complete") queueRender();
+  else window.addEventListener("load", queueRender, { once: true });
+  const themeObserver = new MutationObserver(queueRender);
+  for (const el of [document.documentElement, document.body]) {
+    if (el) themeObserver.observe(el, { attributes: true, attributeFilter: ["data-theme", "class", "style"] });
+  }
+  darkQuery.addEventListener("change", queueRender);
+</script>
+</body>
+</html>
