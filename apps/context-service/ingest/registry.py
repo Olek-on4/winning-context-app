@@ -14,13 +14,51 @@ from datetime import date
 from pathlib import Path
 from typing import Protocol
 
-from models.claim import ClaimRecord, EntityRef, Modality, Polarity, SourceType, Span
+from models.claim import ClaimRecord, DocStatus, EntityRef, Modality, Polarity, SourceType, Span
 from sources import Root
 
 # One span per claim by construction: the extractor locates the line, it does not quote.
 RENAME = re.compile(r"ALTER\s+TABLE\s+(\w+)\s+RENAME\s+COLUMN\s+(\w+)\s+TO\s+(\w+)", re.IGNORECASE)
 ADD = re.compile(r"ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(\w+)", re.IGNORECASE)
 KEY_VALUE = re.compile(r'^\s*"([A-Za-z0-9_.\- ]+)"\s*:\s*(?:"[^"]*"|-?\d+(?:\.\d+)?|true|false)\s*,?\s*$')
+
+
+_PATH_TYPES: tuple[tuple[str, SourceType], ...] = (
+    ("docs/adr/", SourceType.ADR),
+    ("wiki/", SourceType.WIKI),
+    ("meeting-notes/", SourceType.MEETING),
+    ("issues/", SourceType.ISSUE),
+    ("incidents/", SourceType.ISSUE),
+    ("releases/", SourceType.RELEASE),
+    ("api-specs/history/", SourceType.HISTORICAL),
+    ("api-specs/", SourceType.API_SPEC),
+    ("archive/", SourceType.HISTORICAL),
+    ("docs/", SourceType.DESIGN_DOC),
+)
+
+
+def source_type_for(path: Path) -> SourceType:
+    """Path first: in this corpus the directory says more than the extension."""
+    posix = path.as_posix()
+    for prefix, kind in _PATH_TYPES:
+        if posix.startswith(prefix) or f"/{prefix}" in posix:
+            return kind
+    if path.suffix == ".sql":
+        return SourceType.SCHEMA
+    if path.suffix in {".json", ".yaml", ".yml", ".toml"}:
+        return SourceType.CONFIG
+    if path.suffix == ".md":
+        return SourceType.NARRATIVE
+    return SourceType.CODE
+
+
+def declared_status(header: str) -> DocStatus | None:
+    """`Status: Accepted` caps what the document may claim (issue 2)."""
+    value = header.strip().lower()
+    for status in DocStatus:
+        if value.startswith(status.value):
+            return status
+    return None
 
 
 class Pipeline(Protocol):
@@ -135,6 +173,9 @@ class MarkdownStatus:
 
     def extract(self, root: Root, path: Path, digest: str) -> Iterable[ClaimRecord]:
         observed = _observed(root, path.relative_to(root.path))
+        if observed is None:  # a claim with no time signal cannot be resolved
+            return
+        kind = source_type_for(path.relative_to(root.path))
         with path.open("r", encoding="utf-8", errors="replace") as handle:
             for number, line in enumerate(handle, start=1):
                 if number > 40:  # headers live at the top; stop reading early
@@ -149,7 +190,9 @@ class MarkdownStatus:
                     predicate=f"HAS_{field.upper()}", object=value,
                     modality=Modality.FACT, observed_at=observed, valid_from=observed,
                     confidence=1.0, authority=0.4,
-                    source_type=SourceType.NARRATIVE, extractor=self.name,
+                    source_type=kind,
+                    doc_status=declared_status(value) if field == "status" else None,
+                    extractor=self.name,
                 )
 
 

@@ -28,12 +28,32 @@ class Modality(StrEnum):
 
 
 class SourceType(StrEnum):
+    """Where a fact was read from. Fine enough to filter by, coarse enough to stay stable."""
+
     CODE = "code"
     CONFIG = "config"
     API_SPEC = "api_spec"
     SCHEMA = "schema"
-    NARRATIVE = "narrative"
     DIAGRAM = "diagram"
+    ADR = "adr"
+    RELEASE = "release"
+    ISSUE = "issue"
+    MEETING = "meeting"
+    WIKI = "wiki"
+    DESIGN_DOC = "design_doc"
+    HISTORICAL = "historical"  # api-specs/history/, archive/: superseded by path
+    NARRATIVE = "narrative"    # prose whose kind the path does not reveal
+
+
+class DocStatus(StrEnum):
+    """A document's own claim about its lifecycle, when it makes one."""
+
+    ACCEPTED = "accepted"
+    PROPOSED = "proposed"
+    DEFERRED = "deferred"
+    SUPERSEDED = "superseded"
+    OPEN = "open"
+    CLOSED = "closed"
 
 
 class EntityRef(BaseModel):
@@ -74,6 +94,8 @@ class ClaimRecord(BaseModel):
     extractor: str
     extractor_version: str = "1"
     source_type: SourceType = SourceType.NARRATIVE
+    doc_status: DocStatus | None = None
+    modality_capped_from: Modality | None = None
     authority: float = Field(ge=0.0, le=1.0, default=0.45)
 
     @property
