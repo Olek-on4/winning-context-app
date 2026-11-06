@@ -132,7 +132,7 @@ make extract   # corpus -> data/local/claims-extracted.jsonl
 make load      # fixtures + extracted claims -> graph
 make index     # chunks -> graph, with embeddings when Ollama answers
 make serve     # REST on :8000
-make test      # 75 tests, seven traps included
+make test      # whole suite, seven traps included
 make rehearse  # cold start, 12 checks, prints "rehearsal: READY"
 ```
 

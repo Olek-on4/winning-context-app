@@ -112,7 +112,8 @@ def index_corpus(*sources: str) -> None:
     except Exception:  # no model on this machine is a supported state, not an error
         vector = None
     def progress(done: int, total: int) -> None:
-        print(f"  embedded {done}/{total}", flush=True)
+        # stderr: stdout stays the single JSON line callers parse.
+        print(f"  embedded {done}/{total}", file=sys.stderr, flush=True)
 
     chunks = index_chunks(driver, roots, embed=_embed if vector else None, progress=progress)
     print(json.dumps({"chunks": chunks, "embedded": bool(vector), "roots": [r.id for r in roots]}))

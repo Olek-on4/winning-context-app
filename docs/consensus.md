@@ -7,7 +7,7 @@ made about your work. Where I disagree with the branch, the evidence is a file a
 
 | Fact | Evidence |
 |---|---|
-| 72 tests, 0 lint findings | `make check` |
+| whole suite green, 0 lint findings | `make check` |
 | Seven corpus traps answered end to end | `uv run pytest tests/golden -v` |
 | Cold start rehearsed from an empty graph | `scripts/rehearse.py` → `rehearsal: READY` |
 | Data-agnostic ingestion | `sources.py` + `ingest/registry.py`; any directory is a root, pipelines self-register |
@@ -80,7 +80,7 @@ What `main` now does, all verified by command today (Windows-free, RTX 3060, 6 G
 | Claim | Evidence |
 |---|---|
 | 7 corpus traps green end to end | `uv run pytest tests/golden -q` → 7 passed |
-| Full gate | `uv run pytest -q` → 73 passed, `ruff check .` clean |
+| Full gate | `uv run pytest -q` → all passed, `ruff check .` clean |
 | Cold-start rehearsal | `uv run python ../../scripts/rehearse.py` → `rehearsal: READY`, 12/12 |
 | Model-backed retrieval live | 1119 of 1119 chunks carry a 768-d vector; `via: bm25+vector` on T1 |
 | Query latency | `/v1/query` 10 ms, `degraded: false` |

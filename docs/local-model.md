@@ -72,7 +72,7 @@ Nothing else needs configuring: the 768-d vector index already exists in
 
 ```sh
 make index        # expect {"chunks": N, "embedded": true}
-make test         # 72 tests, unaffected by the model
+make test         # whole suite; unaffected by the model
 make rehearse     # 12 checks; the index line must say embedded=true
 ```
 

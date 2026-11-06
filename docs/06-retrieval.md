@@ -85,7 +85,7 @@ a schema they half-remember.
 ## Retrieval pipeline
 
 ```mermaid
-flowchart TB
+flowchart LR
     Q["natural language question"] --> PL["Planner — local LLM<br/>JSON Schema constrained"]
     PL --> V{"validate CQP"}
     V -->|invalid| RP["one repair attempt<br/>with the validator error"]
