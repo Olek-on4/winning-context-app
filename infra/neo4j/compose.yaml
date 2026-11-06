@@ -1,0 +1,23 @@
+# Community edition on purpose: the schema uses uniqueness constraints only.
+# Property-existence constraints are Enterprise-only (ADR-0006).
+services:
+  neo4j:
+    image: neo4j:5-community
+    container_name: northstar-neo4j
+    ports:
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/northstar
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+    volumes:
+      - neo4j-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  neo4j-data:
