@@ -9,30 +9,47 @@ Every pipeline emits the same record. That single constraint is what makes four
 developers able to work in parallel without meetings, and what makes a seventh source
 type a pure addition.
 
-```python
-class Span(BaseModel):
-    path: str                 # relative to the submodule root, verified to exist
-    start_line: int
-    end_line: int             # derived by the gate from the excerpt, never from the model
-    excerpt: str              # transient verification input — never persisted
-    content_hash: str         # file hash the excerpt was checked against
+Defined once in `apps/context-service/models/claim.py`; abridged:
 
-class ClaimRecord(BaseModel):
-    subject: EntityRef        # {kind, key}  e.g. {"kind":"Service","key":"inventory-service"}
-    predicate: Predicate      # closed enum from the ontology
-    object: EntityRef | Literal
-    polarity: Literal["ASSERTS", "NEGATES"]
-    modality: Modality        # FACT | DECISION | PROPOSAL | PLAN | HYPOTHESIS | PROHIBITION
-    valid_from: date | None
-    valid_from_precision: Literal["day", "month"] = "day"
-    valid_to: date | None
-    valid_to_precision: Literal["day", "month"] | None = None
-    observed_at: date | None
-    evidence: list[Span]      # ≥ 1, always
-    confidence: float         # 0..1, the extractor's own
-    extractor: str            # "narrative.header"
-    extractor_version: str    # bump invalidates the cache for that pipeline only
+```python
+class EvidenceHint(BaseModel):    # extractor output, gate 2 input — never persisted
+    path: str                     # relative to the submodule root
+    start_line: int               # a hint: the gate searches the file if it is wrong
+    excerpt: str
+
+class Span(BaseModel):            # what gate 2 writes — a pointer, no prose
+    path: str
+    start_line: int
+    end_line: int                 # derived from the excerpt's newlines, never trusted
+    content_hash: str             # sha256 of the file the excerpt was found in
+
+class ExtractedClaim(BaseModel):  # what every pipeline emits
+    subject: EntityRef            # {kind, key}  e.g. {"kind":"Service","key":"inventory-service"}
+    predicate: Predicate          # closed enum from the ontology
+    object: EntityRef
+    polarity: Polarity            # ASSERTS | NEGATES
+    modality: Modality            # FACT | DECISION | PROPOSAL | PLAN | HYPOTHESIS | PROHIBITION
+    evidence: list[EvidenceHint]  # ≥ 1, always
+    time_evidence: EvidenceHint | None  # dates an undated file: the release that shipped it
+    confidence: float             # 0..1, the extractor's own
+    extractor: str                # "narrative.header"
+    extractor_version: str        # bump invalidates the cache for that pipeline only
+
+class ClaimRecord(...):           # after gates + dating: same fields, plus
+    id: str                       # content-derived
+    evidence: list[Span]
+    source_type: SourceType       # from the path — decides authority
+    declared_status: DocStatus | None    # header pass: "proposed", "deferred", …
+    modality_capped_from: Modality | None  # set when the header capped a DECISION
+    observed_at / valid_from: date | None
+    observed_precision / valid_from_precision: "day" | "month"
+    time_signal: TimeSignal       # which row of 04's table produced the date
 ```
+
+`valid_to` and `valid_to_precision` are not extracted: only the resolver can close a
+claim, so they live on `ResolvedClaim` ([04](04-temporal-model.md#resolution-algorithm)).
+A diagram `Span` points at the PNG, but its lines index the reviewed transcription in
+`data/fixtures/diagrams/<stem>.json` and its hash is that file's.
 
 **Storage is referential.** `excerpt` exists only long enough for gate 2 to verify it
 and is then dropped; the graph stores the pointer plus the file hash. `Chunk.text`
@@ -139,7 +156,10 @@ structured so the model does as little as possible:
 
 1. **Deterministic header pass** — `Date:`/`Status:` fields, filename dates, bylines,
    issue status. Covers signals 1–3 in
-   [04](04-temporal-model.md#where-time-comes-from) with no model.
+   [04](04-temporal-model.md#where-time-comes-from) with no model. The declared status
+   (`ingest/headers.py`, shared by every source type) sets `settledness` and caps any
+   `DECISION` from an unsettled document — see
+   [04](04-temporal-model.md#one-rule-set-for-every-kind-of-source).
 2. **Structure-aware chunking** — split on heading boundaries, target 400–600 tokens.
    The 2026 benchmarks are counter-intuitive here: recursive splitting at ~512 tokens
    beats semantic chunking on end-to-end accuracy (69% vs 54%) despite semantic

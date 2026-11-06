@@ -120,6 +120,21 @@ class TimeSignal(StrEnum):
     GIT = "GIT"
 
 
+class DocStatus(StrEnum):
+    """A document's own declared lifecycle — `Status: Proposed` (ADRs), `Open · 2026-09-11`
+    (issues). Values are the corpus wording, lower-cased; read by ingest/headers.py."""
+
+    ACCEPTED = "accepted"
+    ACCEPTED_WITH_REVIEW = "accepted with review"
+    PROPOSED = "proposed"
+    OPEN = "open"
+    INVESTIGATING = "investigating"
+    UNTRIAGED = "untriaged"
+    DESIGN_REVIEW = "design review"
+    DEFERRED = "deferred"
+    CLOSED = "closed"
+
+
 class Precision(StrEnum):
     DAY = "day"
     MONTH = "month"
@@ -131,3 +146,11 @@ class Verdict(StrEnum):
 
     VALID = "VALID"
     NOT_VALID = "NOT_VALID"
+
+
+class FilterCode(StrEnum):
+    """Why a statement landed in `not_valid` — machine-readable, one per check."""
+
+    STATUS = "STATUS"
+    LOW_CONFIDENCE = "LOW_CONFIDENCE"
+    SINGLE_SOURCE = "SINGLE_SOURCE"

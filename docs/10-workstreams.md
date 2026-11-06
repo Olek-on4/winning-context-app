@@ -15,7 +15,7 @@ the event, so day-of work is wiring — that is what buys the slack, not moving 
 | **Extraction** | Dev A | `apps/context-service/ingest/` | `graph/`, `retrieval/`, `api/` |
 | **Core** | Dev B | `apps/context-service/graph/`, `infra/neo4j/` | `ingest/`, `retrieval/`, `api/` |
 | **Search** | Dev C | `apps/context-service/retrieval/` | `ingest/`, `graph/`, `api/` |
-| **MCP / API** | Dev D | `apps/context-service/api/`, `apps/context-service/mcp/`, `tests/golden/`, `data/fixtures/` | the three above |
+| **MCP / API** | Dev D | `apps/context-service/api/`, `apps/context-service/mcp_server.py`, `tests/golden/`, `data/fixtures/` | the three above |
 
 Boundary rule: a cross-lane change is a message to the owner, not a commit. The only
 shared artefacts are the four contracts below; both sides of a contract change together
@@ -28,9 +28,9 @@ Anchor lines were re-checked on 2026-11-06.
 
 | Contract | Defined by | State |
 |---|---|---|
-| `contracts/claim.py` — `ClaimRecord` + `Span` | [05:6-40](05-extraction-pipelines.md#one-envelope-six-pipelines--four-ship) | text complete: referential `Span` (no persisted excerpt), `valid_from_precision` / `valid_to_precision` |
+| `models/claim.py` — `ClaimRecord` + `Span` (built) | [05:6-40](05-extraction-pipelines.md#one-envelope-six-pipelines--four-ship) | text complete: referential `Span` (no persisted excerpt), `valid_from_precision` / `valid_to_precision` |
 | `contracts/cqp.schema.json` | [06:39-85](06-retrieval.md#the-cqp-schema) | six intents, `IMPACT_OF_CHANGE` removed |
-| `contracts/answer.schema.json` | [06:122-166](06-retrieval.md#answer-assembly) | citations are `{path, lines, hash}`; text resolved by `/v1/span` |
+| `models/answer.py` — `Answer` (built) | [06:122-166](06-retrieval.md#answer-assembly) | citations are `{path, lines, hash}`; text resolved by `/v1/span` |
 | `infra/neo4j/schema.cypher` | [03:157-192](03-ontology.md#storage-indexing-and-validation-in-neo4j) | Community-safe: uniqueness only, non-null in code |
 
 Plus one artefact that buys the parallelism: `data/fixtures/claims-sample.jsonl`,
@@ -117,7 +117,7 @@ risk.
 `curl -s localhost:8000/v1/plan -d '{"question":"does inventory use redis?"}'` returns a
 valid CQP with `intent=STATE_OF`.
 
-### D · MCP / API — `api/`, `mcp/`, `tests/golden/`, `data/fixtures/`
+### D · MCP / API — `api/`, `mcp_server.py`, `tests/golden/`, `data/fixtures/`
 
 Owns the two transports, the proof, and the demo.
 

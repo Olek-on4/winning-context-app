@@ -5,17 +5,19 @@
 
 Only statements with status VALID *and* confidence ≥ min_confidence reach `claims`.
 Everything else that matched goes to `not_valid`, labelled with why, so an agent can
-say "the wiki says X, but that is stale" instead of repeating X."""
+say "the wiki says X, but that is stale" instead of repeating X. Citations are pointers
+(path, lines, hash); the text is fetched with resolve_span, never stored here."""
 
 import re
 from collections import defaultdict
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date
 from pathlib import PurePosixPath
 
 from models.answer import Answer, Citation, Conflict, EvidenceFilter, Statement, TimeFilter
-from models.claim import ResolvedClaim, Span
-from models.ontology import Polarity, Status, Verdict
+from models.claim import ClaimRecord, ResolvedClaim, Span
+from models.ontology import FilterCode, Polarity, SourceType, Status, Verdict
 from settings import Settings
 
 _WORD = re.compile(r"[a-z0-9]+")
@@ -36,24 +38,22 @@ def _tokens(text: str) -> set[str]:
     return {t for t in _WORD.findall(text.lower()) if t not in _STOP}
 
 
-def _relevance(question: set[str], members: Sequence[ResolvedClaim]) -> int:
-    c = members[0].claim
-    keys = _tokens(f"{c.subject.key} {c.object.key}")
-    text = _tokens(" ".join(r.claim.evidence[0].excerpt for r in members))
-    on_key, on_text = len(question & keys), len(question & text)
-    return 3 * on_key + on_text if on_key or on_text >= 2 else 0
+def _relevance(question: set[str], claim: ClaimRecord) -> int:
+    # shortcut: entity keys only; Chunk text + BM25/vector replace this with the graph
+    return len(question & _tokens(f"{claim.subject.key} {claim.object.key}"))
 
 
 def _citation(span: Span, cfg: Settings) -> Citation:
-    path = f"{cfg.corpus_dir}/{span.path}"
-    lines = (span.start_line, span.end_line)
-    excerpt = span.excerpt.replace("</untrusted_source", "&lt;/untrusted_source")
     via = None
     if span.path.endswith(".png"):
         stem = PurePosixPath(span.path).stem
         via = f"reviewed transcription {cfg.diagram_transcripts_dir}/{stem}.json"
-    wrapped = f'<untrusted_source path="{path}" lines="{lines[0]}-{lines[1]}">{excerpt}</untrusted_source>'
-    return Citation(path=path, lines=lines, excerpt=wrapped, via=via)
+    return Citation(
+        path=f"{cfg.corpus_dir}/{span.path}",
+        lines=(span.start_line, span.end_line),
+        hash=span.content_hash,
+        via=via,
+    )
 
 
 def _text(r: ResolvedClaim) -> str:
@@ -62,22 +62,65 @@ def _text(r: ResolvedClaim) -> str:
     return f"{c.subject.key} {neg}{c.predicate} {c.object.key}"
 
 
+@dataclass(frozen=True)
+class Limits:
+    """The answer-time quality bar, resolved once from the request and settings."""
+
+    min_confidence: float
+    min_source_types: int
+    source_types: frozenset[SourceType] | None
+
+    @classmethod
+    def of(cls, evidence: EvidenceFilter, cfg: Settings) -> "Limits":
+        conf, types = evidence.min_confidence, evidence.min_source_types
+        return cls(
+            min_confidence=cfg.min_confidence if conf is None else conf,
+            min_source_types=cfg.min_source_types if types is None else types,
+            source_types=frozenset(evidence.source_types) if evidence.source_types else None,
+        )
+
+
+def verdict(
+    status: Status, confidence: float, source_types: int, limits: Limits
+) -> FilterCode | None:
+    """The one rule every answer is split on. None → VALID; else the first check failed.
+    Order matters: a stale claim is reported as stale, not as weak."""
+    if status is not Status.VALID:
+        return FilterCode.STATUS
+    if confidence < limits.min_confidence:
+        return FilterCode.LOW_CONFIDENCE
+    if source_types < limits.min_source_types:
+        return FilterCode.SINGLE_SOURCE
+    return None
+
+
+def _explain(code: FilterCode | None, top: ResolvedClaim, kinds: int, limits: Limits) -> str:
+    if code is FilterCode.LOW_CONFIDENCE:
+        return f"LOW_CONFIDENCE {top.confidence:.2f} < {limits.min_confidence:.2f}: {top.reason}"
+    if code is FilterCode.SINGLE_SOURCE:
+        return f"SINGLE_SOURCE {kinds} < {limits.min_source_types} source types: {top.reason}"
+    return top.reason
+
+
 def _statement(
     members: list[ResolvedClaim],
     index: dict[str, ResolvedClaim],
-    min_conf: float,
+    limits: Limits,
     cfg: Settings,
 ) -> Statement:
     ranked = sorted(members, key=lambda r: (-r.score.score, r.claim.id))
     top = ranked[0]
-    usable = top.status is Status.VALID and top.confidence >= min_conf
-    reason = top.reason
-    if top.status is Status.VALID and not usable:
-        reason = f"LOW_CONFIDENCE {top.confidence:.2f} < {min_conf:.2f}: {reason}"
+    kinds = len({r.claim.source_type for r in members})
+    code = verdict(top.status, top.confidence, kinds, limits)
+    shown = [
+        r
+        for r in ranked
+        if limits.source_types is None or r.claim.source_type in limits.source_types
+    ]
 
     replaced = sorted({sid for r in members for sid in r.superseded_by if sid in index})
     successors = sorted((index[s] for s in replaced), key=lambda r: (-r.score.score, r.claim.id))
-    closed = [r.valid_to for r in members if r.valid_to]
+    closed = [(r.valid_to, r.valid_to_precision) for r in members if r.valid_to]
     starts = [r.claim.valid_from for r in members if r.claim.valid_from]
     return Statement(
         text=_text(top),
@@ -85,15 +128,17 @@ def _statement(
         predicate=top.claim.predicate,
         object=top.claim.object,
         polarity=top.claim.polarity,
-        verdict=Verdict.VALID if usable else Verdict.NOT_VALID,
+        verdict=Verdict.VALID if code is None else Verdict.NOT_VALID,
         status=top.status,
-        reason=reason,
+        filtered_by=code,
+        reason=_explain(code, top, kinds, limits),
         valid_from=min(starts) if starts else None,
-        valid_to=max(closed) if closed else None,
+        valid_to=max(closed)[0] if closed else None,
+        valid_to_precision=max(closed)[1] if closed else None,
         confidence=top.confidence,
         score=top.score,
         source_types=sorted({r.claim.source_type for r in members}),
-        citations=[_citation(r.claim.evidence[0], cfg) for r in ranked],
+        citations=[_citation(r.claim.evidence[0], cfg) for r in shown],
         superseded_by=[_citation(r.claim.evidence[0], cfg) for r in successors[:2]],
     )
 
@@ -114,9 +159,7 @@ def _within_budget(
 
     if not fits():
         truncated = True
-        not_valid = [
-            st.model_copy(update={"citations": st.citations[:1]}) for st in not_valid
-        ]
+        not_valid = [st.model_copy(update={"citations": st.citations[:1]}) for st in not_valid]
     if not fits():
         claims = [st.model_copy(update={"citations": st.citations[:1]}) for st in claims]
     if not fits():
@@ -136,16 +179,17 @@ def assemble(
     evidence: EvidenceFilter,
     cfg: Settings,
 ) -> Answer:
-    min_conf = cfg.min_confidence if evidence.min_confidence is None else evidence.min_confidence
+    limits = Limits.of(evidence, cfg)
     index = {r.claim.id: r for r in resolved}
     q = _tokens(question)
 
     triples: dict[str, list[ResolvedClaim]] = defaultdict(list)
     for r in resolved:
         c = r.claim
-        triples[f"{c.subject.kind}:{c.subject.key}|{c.predicate}|{c.object.kind}:{c.object.key}"].append(r)
+        triple = f"{c.subject.kind}:{c.subject.key}|{c.predicate}|{c.object.kind}:{c.object.key}"
+        triples[triple].append(r)
 
-    scored = [(rel, key) for key, ms in triples.items() if (rel := _relevance(q, ms))]
+    scored = [(rel, key) for key, ms in triples.items() if (rel := _relevance(q, ms[0].claim))]
     scored.sort(key=lambda x: (-x[0], x[1]))
 
     claims: list[Statement] = []
@@ -156,7 +200,12 @@ def assemble(
             if r.status in time.status_in:
                 buckets[(r.claim.polarity, r.status)].append(r)
         for bucket in sorted(buckets):
-            st = _statement(buckets[bucket], index, min_conf, cfg)
+            members = buckets[bucket]
+            if limits.source_types and not any(
+                r.claim.source_type in limits.source_types for r in members
+            ):
+                continue
+            st = _statement(members, index, limits, cfg)
             (claims if st.verdict is Verdict.VALID else not_valid).append(st)
 
     claims.sort(key=lambda s: -s.confidence)
@@ -175,7 +224,10 @@ def assemble(
     if not scored:
         gaps.append("No claim in the index matches the question.")
     elif not claims:
-        gaps.append(f"No VALID claim with confidence >= {min_conf:.2f} matches the question.")
+        gaps.append(
+            f"No VALID claim with confidence >= {limits.min_confidence:.2f} "
+            f"from >= {limits.min_source_types} source type(s) matches the question."
+        )
 
     summary = "; ".join(st.text for st in claims[:3]) if claims else "No valid evidence found."
     return Answer(

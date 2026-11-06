@@ -31,7 +31,9 @@ Supporting material:
 
 Version 1.0 — **frozen for implementation**, 2026-11-06. Scope and the five blockers
 from the review are settled in [ADR-0006](adr/0006-scope-of-the-build.md); nothing else
-may be added without a new ADR. Not yet implemented.
+may be added without a new ADR. Implemented so far: claim contract, span gate and
+dating, temporal resolver with scoring, the quality filter, `context_search` and
+`resolve_span` over a fixture-backed claim file ([ADR-0007](adr/0007-quality-filter.md)).
 Every document below is a *claim about what we will build*. When implementation
 disagrees with a document, the document is wrong: fix it in the same commit.
 Open findings from [plan-review.html](plan-review.html) are tracked in

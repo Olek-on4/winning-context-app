@@ -11,14 +11,17 @@ from datetime import date
 from api.render import render_text
 from ingest.pipeline import ingest
 from models.answer import EvidenceFilter, TimeFilter
-from models.ontology import Status
+from models.ontology import SourceType, Status
 from service import IndexMissing, query, resolved
 from settings import load_settings
 
 
 def _ingest(_: argparse.Namespace) -> int:
     report = ingest(load_settings())
-    print(f"written {report.written} claims, dropped {len(report.dropped)}")
+    print(
+        f"written {report.written} claims, dropped {len(report.dropped)}, "
+        f"span_corrected {report.span_corrected}, modality_capped {report.modality_capped}"
+    )
     for reason in report.dropped:
         print(f"  dropped {reason}")
     return 1 if report.dropped else 0
@@ -35,10 +38,14 @@ def _resolve(args: argparse.Namespace) -> int:
 
 
 def _query(args: argparse.Namespace) -> int:
-    time = TimeFilter(as_of=args.as_of, status_in=[Status.VALID]) if args.valid_only else (
-        TimeFilter(as_of=args.as_of)
+    status_in = [Status.VALID] if args.valid_only else list(Status)
+    time = TimeFilter(as_of=args.as_of, status_in=status_in)
+    evidence = EvidenceFilter(
+        min_confidence=args.min_confidence,
+        min_source_types=args.min_source_types,
+        source_types=args.source_type,
     )
-    answer = query(args.question, load_settings(), time, EvidenceFilter(min_confidence=args.min_confidence))
+    answer = query(args.question, load_settings(), time, evidence)
     print(answer.model_dump_json(indent=2) if args.json else render_text(answer))
     return 0
 
@@ -58,6 +65,14 @@ def main() -> None:
     p.add_argument("question")
     p.add_argument("--as-of", type=date.fromisoformat)
     p.add_argument("--min-confidence", type=float)
+    p.add_argument("--min-source-types", type=int, help="independent source types for VALID")
+    p.add_argument(
+        "--source-type",
+        action="append",
+        type=SourceType,
+        choices=list(SourceType),
+        help="show only statements backed by this type (repeatable)",
+    )
     p.add_argument("--valid-only", action="store_true", help="omit the NOT VALID section")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=_query)

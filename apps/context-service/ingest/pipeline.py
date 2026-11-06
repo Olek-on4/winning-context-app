@@ -12,9 +12,10 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from ingest.dates import Dated, date_from_content, date_from_git
-from ingest.gates import SourceUnavailable, read_lines, span_failure
+from ingest.gates import Source, SourceUnavailable, locate, read_source
+from ingest.headers import capped_modality, declared_status
 from ingest.router import source_type
-from models.claim import ClaimRecord, ExtractedClaim, Span
+from models.claim import ClaimRecord, EvidenceHint, ExtractedClaim, Span
 from models.ontology import TimeSignal
 from settings import Settings
 
@@ -24,59 +25,72 @@ log = logging.getLogger(__name__)
 @dataclass
 class IngestReport:
     written: int = 0
+    span_corrected: int = 0
+    modality_capped: int = 0
     dropped: list[str] = field(default_factory=list)
 
 
-def claim_id(claim: ExtractedClaim) -> str:
-    """Content-derived, so a re-run MERGEs instead of duplicating."""
-    canonical = json.dumps(claim.model_dump(mode="json"), sort_keys=True, ensure_ascii=False)
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
-
-
-class _Lines:
+class _Sources:
     def __init__(self, settings: Settings) -> None:
         self._corpus = settings.corpus_root
         self._transcripts = settings.resolve_path(settings.diagram_transcripts_dir)
-        self._cache: dict[str, list[str]] = {}
+        self._cache: dict[str, Source] = {}
 
-    def __call__(self, path: str) -> list[str]:
+    def __call__(self, path: str) -> Source:
         if path not in self._cache:
-            self._cache[path] = read_lines(self._corpus, self._transcripts, path)
+            self._cache[path] = read_source(self._corpus, self._transcripts, path)
         return self._cache[path]
 
 
-def _checked(span: Span, lines: _Lines) -> list[str]:
-    """Return the file's lines, or raise ValueError naming the broken span."""
+def _verify(hint: EvidenceHint, sources: _Sources, report: IngestReport) -> Span:
     try:
-        file_lines = lines(span.path)
+        source = sources(hint.path)
     except SourceUnavailable as exc:
         raise ValueError(str(exc)) from exc
-    if reason := span_failure(span, file_lines):
-        raise ValueError(reason)
-    return file_lines
+    found = locate(hint, source)
+    if found is None:
+        raise ValueError(f"excerpt not found in {hint.path} (hinted line {hint.start_line})")
+    span, corrected = found
+    report.span_corrected += corrected
+    return span
 
 
-def _date(claim: ExtractedClaim, lines: _Lines, settings: Settings) -> Dated | None:
-    primary = claim.evidence[0]
-    if dated := date_from_content(primary.path, lines(primary.path)):
+def _date(primary: Span, time_span: Span | None, sources: _Sources, cfg: Settings) -> Dated | None:
+    if dated := date_from_content(primary.path, sources(primary.path).lines):
         return dated
-    if claim.time_evidence is not None:
-        te = claim.time_evidence
-        if referenced := date_from_content(te.path, _checked(te, lines)):
-            return Dated(referenced.on, referenced.precision, TimeSignal.REFERENCED_RECORD)
+    if time_span and (ref := date_from_content(time_span.path, sources(time_span.path).lines)):
+        return Dated(ref.on, ref.precision, TimeSignal.REFERENCED_RECORD)
     if primary.path.endswith(".png"):
         return None
-    return date_from_git(settings.corpus_root, primary.path)
+    return date_from_git(cfg.corpus_root, primary.path)
 
 
-def to_record(claim: ExtractedClaim, lines: _Lines, settings: Settings) -> ClaimRecord:
-    for span in claim.evidence:
-        _checked(span, lines)
-    dated = _date(claim, lines, settings)
+def claim_id(claim: ExtractedClaim, spans: list[Span]) -> str:
+    """hash(subject, predicate, object, span, extractor_version) — re-runs MERGE."""
+    core = claim.model_dump(mode="json", exclude={"evidence", "time_evidence"})
+    core["evidence"] = [s.model_dump(mode="json") for s in spans]
+    canonical = json.dumps(core, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+
+
+def to_record(
+    claim: ExtractedClaim, sources: _Sources, cfg: Settings, report: IngestReport
+) -> ClaimRecord:
+    spans = [_verify(h, sources, report) for h in claim.evidence]
+    time_span = _verify(claim.time_evidence, sources, report) if claim.time_evidence else None
+    dated = _date(spans[0], time_span, sources, cfg)
+    status = declared_status(sources(spans[0].path).lines)
+    modality = capped_modality(claim.modality, status, cfg)
+    report.modality_capped += modality is not claim.modality
     return ClaimRecord(
-        **claim.model_dump(),
-        id=claim_id(claim),
-        source_type=source_type(claim.evidence[0].path),
+        **claim.model_dump(exclude={"evidence", "time_evidence", "modality"}),
+        modality=modality,
+        modality_capped_from=claim.modality if modality is not claim.modality else None,
+        declared_status=status,
+        id=claim_id(claim, spans),
+        evidence=spans,
+        time_evidence=time_span,
+        source_type=source_type(spans[0].path),
         observed_at=dated.on if dated else None,
         observed_precision=dated.precision if dated else None,
         time_signal=dated.signal if dated else None,
@@ -85,21 +99,20 @@ def to_record(claim: ExtractedClaim, lines: _Lines, settings: Settings) -> Claim
     )
 
 
-def ingest(settings: Settings, source: Path | None = None) -> IngestReport:
-    source = source or settings.resolve_path(settings.fixtures_path)
-    target = settings.resolve_path(settings.claims_path)
-    lines = _Lines(settings)
+def ingest(cfg: Settings, source: Path | None = None) -> IngestReport:
+    source = source or cfg.resolve_path(cfg.fixtures_path)
+    target = cfg.resolve_path(cfg.claims_path)
+    sources = _Sources(cfg)
     report = IngestReport()
     records: dict[str, ClaimRecord] = {}
 
     for number, raw in enumerate(source.read_text(encoding="utf-8").splitlines(), start=1):
         if not raw.strip():
             continue
-        where = f"{source.name}:{number}"
         try:
-            record = to_record(ExtractedClaim.model_validate_json(raw), lines, settings)
+            record = to_record(ExtractedClaim.model_validate_json(raw), sources, cfg, report)
         except (ValidationError, ValueError) as exc:
-            reason = f"{where}: {exc}".replace("\n", " ")
+            reason = f"{source.name}:{number}: {exc}".replace("\n", " ")
             log.warning("dropped claim %s", reason)
             report.dropped.append(reason)
             continue

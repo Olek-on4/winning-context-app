@@ -83,7 +83,7 @@ the date so the confidence can be audited:
 | 2 | Filename | `incidents/2026-06-02-*.md`, `releases/2026-06-v1.3.md`, `meeting-notes/` | 0.95 |
 | 3 | Byline | `· 2026-02-17`, `Last edited 2026-02-03`, `Open · 2026-09-11` | 0.90 |
 | 4 | Path convention | `api-specs/history/**` → `DEPRECATED`; `archive/**` → `DEPRECATED` | 0.95 |
-| 5 | Migration order | `001-users.sql` < `002-account-tiers.sql`; each bounded by its release | 0.85 |
+| 5 | Referenced record | an undated file dated by the record that ships it: `002-account-tiers.sql` ← `releases/2026-03-v1.0.md:5` (the reference is itself span-gated) | 0.85 |
 | 6 | Diagram title | `"September 2026"` rendered in the image | 0.70 (VLM-capped) |
 | 7 | Git history | `git log -1 --format=%aI -- <path>` | 0.60 — *file mtime ≠ fact validity* |
 | 8 | Prose temporal cue | "scheduled after", "remains a proposal", "effective date next month", "paused" | 0.55 — sets **modality**, not a date |
@@ -118,64 +118,189 @@ every supersession in the corpus is silently biased by up to a month.
 ## Resolution algorithm
 
 Runs after extraction, before materialisation. Deterministic; no model in the loop.
+Implemented as pure functions in `apps/context-service/graph/resolve.py`. Nothing in it
+names a source type or a document status: every per-type rule is a row in the
+[policy tables](#one-rule-set-for-every-kind-of-source).
 
-For each `(subject, predicate, object)` group, ordered by `observed_at`:
+For each `(subject, predicate, object)` group, at a given `as_of` (claims observed
+later do not exist yet):
 
-1. **Score each claim.** `score = authority × time_confidence × extractor_confidence`,
-   where `authority` is the source-tier prior from
-   [03](03-ontology.md#source-authority).
-2. **Apply explicit supersession.** If a claim's text names an earlier artefact
-   (`"ADR-003 and INV-190 record the follow-up"`, `"follows ADR-003"`), write
-   `SUPERSEDES` and close the earlier claim's `valid_to` at the later claim's
-   `valid_from`. Explicit beats inferred, always.
-3. **Apply negation.** A later `NEGATES` claim ("Remove Redis from the local inventory
-   path") closes every open `ASSERTS` claim for the same triple. This is how T1 resolves.
-4. **Apply prohibition.** An active `PROHIBITION` claim blocks promotion of any claim
-   it names, regardless of score. ADR-004's closing sentence is such a block: it
-   prevents the SSO proposal from ever being materialised as a relationship.
-5. **Rank the survivors.** Highest score wins → `VALID`. Losers with an earlier
-   `valid_from` → `DEPRECATED`. Losers with `modality ∈ {PROPOSAL, PLAN}` →
-   `PROPOSED`/`PLANNED` and are never compared against facts for supersession.
-6. **Detect genuine ties.** Two claims with overlapping validity, scores within 0.15,
-   and no supersession link → both `DISPUTED`, linked by `CONTRADICTS`. **The service
-   never picks a winner by coin-flip; it reports the disagreement.**
-7. **Corroborate.** Two independent claims (different `source_type`) agreeing on the
-   same triple → `CORROBORATES` and `confidence = 1 − ∏(1 − cᵢ)`. This is how the
-   September diagram, ADR-003 and release 1.3 jointly make "SQLite on the read path"
-   near-certain, and the mechanism that promotes SEC-22 from lead to finding if
-   static analysis independently flags the same handler.
+1. **Score each claim** — see [Scoring](#scoring-and-the-quality-filter) below.
+2. **Path rule.** Source types with `deprecated_by_path` (`api-specs/history/**`,
+   `archive/**`) → `DEPRECATED`, whatever the text says.
+3. **Supersede.** A later `FACT`/`DECISION` of the opposite polarity closes an earlier
+   one: `valid_to` = the successor's `valid_from` (month precision → last day of the
+   month), status `DEPRECATED`. Guard: the successor must score at least
+   `supersede_ratio × ` the earlier claim, so a late wiki page cannot overrule a
+   migration. If the closing day is after `as_of` (a June release asked about on
+   June 10), the old claim is `DISPUTED` — the day is unknown — not `DEPRECATED`.
+   This is how T1 (`ADR-003` negates Redis) and T2 (migration 002 negates `status`)
+   resolve. *Explicit textual supersession ("follows ADR-003") is not built yet.*
+4. **Rank what is still open.** One polarity left → `VALID`. Both left: scores within
+   `tie_margin` → all `DISPUTED`, linked by `CONTRADICTS`; otherwise the stronger side
+   is `VALID` and the weaker `DISPUTED`. **The service never picks a winner by
+   coin-flip; it reports the disagreement.**
+5. **Hypotheses** (`HYPOTHESIS`, e.g. SEC-22) stay `DISPUTED` until a different source
+   type agrees. One signal is a lead, not a finding.
+6. **Needs corroboration.** If every `VALID` claim on a side comes from source types
+   with `needs_corroboration` (diagrams), they are demoted to `DISPUTED`: a drawing
+   alone never makes something current. The September diagram's console → gateway
+   edge stays `DISPUTED` — exactly what `issues/EDGE-53.md:7` warns: *"A diagram showing
+   the target topology should not be used as proof that this ticket is done."*
+7. **Proposals and plans.** If a `VALID` fact now says the same thing, the proposal is
+   `DEPRECATED` as *realised* (the wiki's "tiers remain a proposal" is stale because
+   migration 002 shipped them). If a later fact says the opposite, `DEPRECATED` as
+   *overtaken*. An active `PROHIBITION` on the same subject keeps it `PROPOSED` and
+   records `blocked_by` (ADR-004). Otherwise `PROPOSED` / `PLANNED`.
+8. **Corroborate.** `VALID` claims on the same side combine across **source types**:
+   `confidence = 1 − ∏(1 − best score per type)`. Three wiki pages copying each other
+   count once.
 
-Worked trace for T1:
+Worked trace for T1, computed by `uv run ncs resolve --as-of 2026-11-06`:
 
-| Claim | Source | authority | observed | modality | Outcome |
-|---|---|---:|---|---|---|
-| `inventory-service READS_FROM Redis` | `wiki/inventory-service.md:5` | 0.45 | 2026-02-17 | FACT | `DEPRECATED`, `valid_to=2026-06-04` (step 3) |
-| `inventory-service READS_FROM Redis` | `diagrams/architecture-january.png` | 0.40 | 2026-01 | FACT | `DEPRECATED`, `valid_to=2026-06-04` |
-| `NOT inventory-service READS_FROM Redis` | `docs/adr/003-stock-cache.md:6` | 0.80 | 2026-06-04 | DECISION | `VALID` — the negation |
-| `inventory-service READS_FROM SQLite` | `releases/2026-06-v1.3.md` | 0.80 | 2026-06 | FACT | `VALID`, corroborated → 0.96 |
-| `inventory-service READS_FROM SQLite` | `apps/inventory-service/app.py` | 0.90 | — | FACT | `VALID`, corroborates the above |
+| Claim | Source | authority × time × extractor × settled × fresh | score | Outcome |
+|---|---|---|---:|---|
+| `READS_FROM redis` | `wiki/inventory-service.md:5` | 0.45 × 0.90 × 0.80 × 1.00 × 0.52 | 0.168 | `DEPRECATED`, `valid_to=2026-06-04` |
+| `READS_FROM redis` | `diagrams/architecture-january.png` | 0.40 × 0.70 × 0.70 × 1.00 × 0.50 | 0.098 | `DEPRECATED`, `valid_to=2026-06-04` |
+| `NOT READS_FROM redis` | `docs/adr/003-stock-cache.md:6` | 0.80 × 1.00 × 0.95 × 1.00 × 1.00 | 0.760 | `VALID` |
+| `NOT READS_FROM redis` | `releases/2026-06-v1.3.md:5` | 0.80 × 0.95 × 0.95 × 1.00 × 1.00 | 0.722 | `VALID` |
+| `NOT READS_FROM redis` | `issues/INV-190.md:5` (`Closed`) | 0.55 × 0.90 × 0.90 × 1.00 × 1.00 | 0.446 | `VALID` → 3 types together 0.96 |
+| `READS_FROM sqlite` | ADR-003, release 1.3, INV-190, meeting 06-04, API spec, Sept diagram | — | — | `VALID`, 6 source types → 0.99 |
 
-Note what happens without step 3: the two Redis claims and the two SQLite claims are
-contemporaneous-ish and all score respectably, and a scoring-only system returns
-`DISPUTED` — an honest non-answer. Explicit negation handling is what converts it into
-a correct answer. Most of the intelligence here is in reading what the documents
-*literally say about each other*.
+Note what happens without step 3: the Redis and SQLite claims are contemporaneous-ish
+and all score respectably, and a scoring-only system returns `DISPUTED` — an honest
+non-answer. Reading what the documents *literally say about each other* is what
+converts it into a correct answer.
+
+## One rule set for every kind of source
+
+Diagrams, wikis, API specs, ADRs, issues, migrations and config all pass through the
+same three filters. What differs per kind of data is a **row in a table** in
+`apps/context-service/settings.py`, never a branch in code. A new source type is one
+row in `SOURCES` plus one line in the path router; a new status word is one row in
+`DOC_STATUSES`.
+
+**`SOURCES` — per source type** (path → type: `ingest/router.py`):
+
+| Source type | `authority` | `deprecated_by_path` | `needs_corroboration` |
+|---|---:|:---:|:---:|
+| `MIGRATION`, `CONFIG` | 1.00 | | |
+| `CODE` | 0.90 | | |
+| `API_SPEC` | 0.85 | | |
+| `ADR`, `RELEASE` | 0.80 | | |
+| `DESIGN_DOC` | 0.65 | | |
+| `ISSUE` (issues, incidents) | 0.55 | | |
+| `MEETING` | 0.50 | | |
+| `WIKI` | 0.45 | | |
+| `DIAGRAM` | 0.40 | | ✓ |
+| `HISTORICAL` (`api-specs/history/`, `archive/`) | 0.20 | ✓ | |
+
+**`DOC_STATUSES` — per declared document status.** One reader
+(`ingest/headers.py`) for every type, because `Status: Proposed` in an ADR and
+`Deferred · 2026-07-17` in an issue are the same fact spelled twice. Unknown words are
+ignored, never guessed.
+
+| Status (corpus wording) | `settledness` | A `DECISION` in it becomes | Example |
+|---|---:|---|---|
+| `accepted`, `closed` | 1.00 | — | `docs/adr/003-stock-cache.md:4`, `issues/INV-190.md:3` |
+| `accepted with review` | 0.90 | — | `docs/adr/005-support-access.md:4` |
+| `design review` | 0.80 | `PROPOSAL` | `issues/PEOPLE-71.md:3` |
+| `open`, `investigating` | 0.75 | `PROPOSAL` | `issues/SEC-22.md:3`, `issues/PAY-118.md:3` |
+| `deferred` | 0.70 | `PLAN` | `issues/EDGE-53.md:3` |
+| `untriaged`, `proposed` | 0.60 | `PROPOSAL` | `issues/LAB-12.md:3`, `docs/adr/004-people-sso.md:4` |
+
+The cap is the deterministic answer to "can this document decide anything?": a deferred
+ticket's "console stock writes through Edge" is a plan, not a decision, whatever the
+extractor thought. Facts it *reports* and prohibitions it *states* are not capped — an
+open bug's reproduction is still an observation, just a less settled one. Every capped
+claim records `modality_capped_from`; `ncs ingest` prints how many.
+
+## Scoring and the quality filter
+
+One number per claim, five factors:
+
+```
+score = authority × time_confidence × extractor_confidence × settledness × freshness
+```
+
+| Factor | Question it answers | Range | From |
+|---|---|---|---|
+| `authority` | *What kind of artefact said it?* Machine-executed beats prose. | 0.20–1.00 | `SOURCES` |
+| `time_confidence` | *How sure are we of the date?* | 0.60–1.00 | `Date:` field 1.00 · filename 0.95 · byline 0.90 · referenced record 0.85 · diagram title 0.70 · git 0.60 |
+| `extractor_confidence` | *How sure was the extractor of the claim?* | 0–1 | the `ClaimRecord` |
+| `settledness` | *How final does the document say it is?* | 0.60–1.00 | `DOC_STATUSES`; 1.00 when it declares none |
+| `freshness` | *Has something newer contradicted it?* | 0.50–1.00 | halves every 120 days by which the newest contradicting fact is newer; 1.00 when nothing contradicts it |
+
+Freshness is **relative to contradiction, not to today** ([ADR-0007](adr/0007-quality-filter.md)):
+an old fact nobody disputes keeps 1.00. The wiki's Redis claim gets 0.52 because INV-190
+contradicted it 114 days later (`0.5^(114/120)`); the floor of 0.50 stops age alone from
+erasing a strong source.
+
+**`score` vs `confidence`.** `score` is one claim. `confidence` is the statement: for
+`VALID` claims it is the corroborated value from step 8; otherwise it equals the score.
+
+**The verdict** is what the answer is split on. One function
+(`retrieval/assemble.py:verdict`), three checks in order, the first failure is reported
+as `filtered_by`:
+
+| Check | Fails when | `filtered_by` | Default |
+|---|---|---|---|
+| 1 | status is not `VALID` | `STATUS` | — |
+| 2 | `confidence < min_confidence` | `LOW_CONFIDENCE` | 0.40 |
+| 3 | fewer independent source types than `min_source_types` | `SINGLE_SOURCE` | 1 |
+
+Pass all three → `claims`, the only thing an agent may state as current. Fail any →
+`not_valid`, returned as a warning with its reason, never as fact. Order matters: a stale
+claim is reported as stale, not as weak.
+
+Real cases from the fixtures:
+
+- `issues/INV-207.md:5` (open bug, single report) — status `VALID`, confidence 0.30 →
+  `LOW_CONFIDENCE`. One unsettled ticket is a lead, not evidence.
+- `wiki/inventory-service.md:7` "port 5005" — alone it would score 0.32; with
+  `config/ports.json:10` agreeing it is 0.73 → `VALID`. The wiki is not distrusted; it is
+  checked.
+- With `min_source_types=2`, ADR-005's console exception (one source) → `SINGLE_SOURCE`.
+
+Two request-time knobs reuse the same machinery for any data type, on `context_search`
+and `ncs query`: `source_types` shows only statements backed by those types (*"what do
+the diagrams say, and is it still true?"*) — they are still judged against every source —
+and `min_source_types` raises the corroboration bar.
+
+**Reading a statement** in an answer:
+
+```
+- inventory-service READS_FROM redis
+    status DEPRECATED · confidence 0.17 · 2026-01-01 → 2026-06-04 · sources diagram, wiki
+    why: superseded on 2026-06-04 by docs/adr/003-stock-cache.md:6
+```
+
+*"Redis was true from January until 4 June; ADR-003 replaced it; the best surviving
+evidence for it is weak."*
+
+**Arguing with it.** Every weight and threshold is in `settings.py` (`SOURCES`,
+`DOC_STATUSES`, `TIME_CONFIDENCE`, `freshness_half_life_days`, `freshness_floor`,
+`supersede_ratio`, `tie_margin`, `min_confidence`, `min_source_types`), the scalars
+overridable as `NCS_<FIELD>`. `uv run ncs resolve` prints every claim with its status,
+score and reason, so the effect of a change is visible in one command.
 
 ## Querying time
 
-Every retrieval call takes a time filter, defaulting to "current truth":
+Every retrieval call takes a time filter. By default every status comes back, split by
+[verdict](#scoring-and-the-quality-filter): `claims` holds only what is current, and
+`not_valid` holds the rest, labelled — because an agent that never sees the stale wiki
+claim cannot tell the user why the wiki disagrees.
 
 ```jsonc
 "time": {
   "as_of": "now",                       // or an ISO date for point-in-time
-  "status_in": ["VALID"],               // the default
-  "include_superseded_chain": true      // return what replaced what
+  "status_in": ["VALID", "DEPRECATED", "PLANNED", "PROPOSED", "DISPUTED", "UNKNOWN"]
 }
 ```
 
 Three canonical modes:
 
-- **Current** (`status_in: [VALID]`) — default for IDE agents. What should I build against.
+- **Current** (`status_in: [VALID]`) — `valid_only` in the MCP tool. What should I build against.
 - **Point-in-time** (`as_of: "2026-03-01"`) — `valid_from ≤ t AND (valid_to IS NULL OR valid_to > t)`.
   Incident reconstruction: *what was the architecture when this outage happened?*
 - **Full history** (`status_in: [VALID, DEPRECATED, PLANNED, PROPOSED, DISPUTED]`) —

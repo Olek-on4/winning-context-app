@@ -15,7 +15,8 @@ def _window(st: Statement) -> str:
 def _block(st: Statement) -> list[str]:
     lines = [
         f"- {st.text}",
-        f"    status {st.status} · confidence {st.confidence:.2f} · {_window(st)}",
+        f"    status {st.status} · confidence {st.confidence:.2f} · {_window(st)}"
+        f" · sources {', '.join(t.lower() for t in st.source_types)}",
         f"    why: {st.reason}",
     ]
     for c in st.citations:
@@ -30,7 +31,7 @@ def render_text(answer: Answer) -> str:
     out = [f"Q: {answer.question}  (as of {answer.as_of})", f"A: {answer.answer}", ""]
     out.append("VALID — current, evidence-backed, safe to use:")
     out += [line for st in answer.claims for line in _block(st)] or ["  (none)"]
-    out += ["", "NOT VALID — stale, proposed, planned, disputed or too weak; do not use as current:"]
+    out += ["", "NOT VALID — stale, proposed, planned, disputed or too weak; not current:"]
     out += [line for st in answer.not_valid for line in _block(st)] or ["  (none)"]
     if answer.conflicts:
         out += ["", "CONFLICTS:"]

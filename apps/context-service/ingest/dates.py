@@ -17,10 +17,10 @@ _EXPLICIT = re.compile(r"^Date: (\d{4}-\d{2}-\d{2})\s*$")
 _FILENAME_DAY = re.compile(r"^(\d{4}-\d{2}-\d{2})-")
 _FILENAME_MONTH = re.compile(r"^(\d{4}-\d{2})-")
 _ISO_DAY = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
-_MONTHS = (
-    "january february march april may june july "
-    "august september october november december"
-).split()
+_MONTHS: list[str] = [
+    "january", "february", "march", "april", "may", "june", "july",
+    "august", "september", "october", "november", "december",
+]  # fmt: skip
 _TITLE_MONTH = re.compile(r"\b(" + "|".join(_MONTHS) + r") (\d{4})\b", re.IGNORECASE)
 
 

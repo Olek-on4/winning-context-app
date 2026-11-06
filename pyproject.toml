@@ -37,9 +37,13 @@ testpaths = ["tests"]
 line-length = 100
 target-version = "py312"
 extend-exclude = ["vendor"]
+include = ["*.py", "*.pyi"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["api", "graph", "ingest", "models", "retrieval", "settings", "service", "cli", "mcp_server", "tests"]
 
 [tool.pyright]
 typeCheckingMode = "basic"

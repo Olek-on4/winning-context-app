@@ -7,11 +7,11 @@ Algorithm and rationale: docs/04-temporal-model.md#resolution-algorithm."""
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 
 from graph.scoring import corroborate, freshness, score
 from models.claim import ClaimRecord, EntityRef, ResolvedClaim, ScoreBreakdown
-from models.ontology import Modality, Polarity, SourceType, Status
+from models.ontology import Modality, Polarity, Precision, SourceType, Status
 from settings import Settings
 
 _FACTUAL = {Modality.FACT, Modality.DECISION}
@@ -25,6 +25,7 @@ class _Work:
     status: Status | None = None
     reason: str = ""
     valid_to: date | None = None
+    valid_to_precision: Precision | None = None
     confidence: float = 0.0
     superseded_by: list[str] = field(default_factory=list)
     conflicts_with: list[str] = field(default_factory=list)
@@ -43,6 +44,14 @@ class _Work:
     def set(self, status: Status, reason: str) -> None:
         self.status, self.reason = status, reason
 
+    def close_at(self, end: "_Work") -> None:
+        """A month-precision successor closes at the month's last day, so a June
+        supersession never appears to take effect on June 1 (docs/04, partial dates)."""
+        on, precision = end.since, end.claim.valid_from_precision
+        if precision is Precision.MONTH:
+            on = (on.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+        self.valid_to, self.valid_to_precision = on, precision
+
 
 def _cite(w: _Work) -> str:
     span = w.claim.evidence[0]
@@ -57,7 +66,7 @@ def _strongest(ws: Sequence[_Work]) -> _Work:
     return max(ws, key=lambda w: (w.s, w.claim.id))
 
 
-def _supersede(facts: list[_Work], cfg: Settings) -> None:
+def _supersede(facts: list[_Work], as_of: date, cfg: Settings) -> None:
     """A later fact of opposite polarity closes an earlier one — unless it is so much
     weaker (score < supersede_ratio × earlier) that a wiki could overrule a migration."""
     for w in facts:
@@ -70,9 +79,12 @@ def _supersede(facts: list[_Work], cfg: Settings) -> None:
         ]
         if later:
             best = _strongest(later)
-            w.set(Status.DEPRECATED, f"superseded on {best.since} by {_cite(best)}")
-            w.valid_to = best.since
+            w.close_at(best)
             w.superseded_by = sorted(d.claim.id for d in later)
+            if w.valid_to and w.valid_to > as_of:
+                w.set(Status.DISPUTED, f"superseded during {best.since:%Y-%m}; day unknown")
+                continue
+            w.set(Status.DEPRECATED, f"superseded on {w.valid_to} by {_cite(best)}")
 
 
 def _rank_open(facts: list[_Work], cfg: Settings) -> None:
@@ -117,12 +129,15 @@ def _hypotheses(ws: list[_Work]) -> None:
             w.set(Status.DISPUTED, "reported, not verified: a single-source hypothesis")
 
 
-def _diagram_only(ws: list[_Work]) -> None:
+def _needs_corroboration(ws: list[_Work], cfg: Settings) -> None:
+    """Source types that are never enough alone (diagrams): VALID only if a source type
+    without that flag agrees."""
     for p in Polarity:
         valid = [w for w in ws if w.status is Status.VALID and w.claim.polarity == p]
-        if valid and all(w.claim.source_type is SourceType.DIAGRAM for w in valid):
+        if valid and all(cfg.sources[w.claim.source_type].needs_corroboration for w in valid):
+            kinds = "/".join(sorted({w.claim.source_type.lower() for w in valid}))
             for w in valid:
-                w.set(Status.DISPUTED, "diagram-only evidence; no non-diagram source agrees")
+                w.set(Status.DISPUTED, f"{kinds}-only evidence; needs another source type")
 
 
 def _intent(ws: list[_Work], prohibitions: dict[str, list[_Work]]) -> None:
@@ -131,14 +146,12 @@ def _intent(ws: list[_Work], prohibitions: dict[str, list[_Work]]) -> None:
         if w.claim.modality not in _INTENT:
             continue
         realised = [f for f in facts if f.claim.polarity == w.claim.polarity]
-        rejected = [
-            f for f in facts if f.claim.polarity != w.claim.polarity and f.since >= w.since
-        ]
+        rejected = [f for f in facts if f.claim.polarity != w.claim.polarity and f.since >= w.since]
         if realised or rejected:
             best = _strongest(realised or rejected)
             verb = "realised" if realised else "overtaken"
             w.set(Status.DEPRECATED, f"{verb}: now settled by {_cite(best)}")
-            w.valid_to = max(w.since, best.since)
+            w.close_at(best if best.since >= w.since else w)
             w.superseded_by = [best.claim.id]
             continue
         blockers = prohibitions.get(_key(w.claim.subject), [])
@@ -167,19 +180,21 @@ def _confidence(ws: list[_Work]) -> None:
                 w.reason += f"; corroborated by {len(best)} source types"
 
 
-def _resolve_group(ws: list[_Work], prohibitions: dict[str, list[_Work]], cfg: Settings) -> None:
+def _resolve_group(
+    ws: list[_Work], prohibitions: dict[str, list[_Work]], as_of: date, cfg: Settings
+) -> None:
     facts: list[_Work] = []
     for w in ws:
-        if w.claim.source_type is SourceType.HISTORICAL:
+        if cfg.sources[w.claim.source_type].deprecated_by_path:
             w.set(Status.DEPRECATED, "path rule: api-specs/history/ and archive/ are superseded")
         elif w.claim.modality is Modality.PROHIBITION:
             w.set(Status.VALID, "active prohibition")
         elif w.claim.modality in _FACTUAL:
             facts.append(w)
-    _supersede(facts, cfg)
+    _supersede(facts, as_of, cfg)
     _rank_open(facts, cfg)
     _hypotheses(ws)
-    _diagram_only(ws)
+    _needs_corroboration(ws, cfg)
     _intent(ws, prohibitions)
     _confidence(ws)
 
@@ -217,7 +232,7 @@ def resolve(claims: Sequence[ClaimRecord], as_of: date, cfg: Settings) -> list[R
             prohibitions[_key(w.claim.subject)].append(w)
 
     for triple in sorted(groups):
-        _resolve_group([work[c.id] for c in groups[triple]], prohibitions, cfg)
+        _resolve_group([work[c.id] for c in groups[triple]], prohibitions, as_of, cfg)
 
     return [
         ResolvedClaim(
@@ -225,6 +240,7 @@ def resolve(claims: Sequence[ClaimRecord], as_of: date, cfg: Settings) -> list[R
             status=w.status or Status.UNKNOWN,
             reason=w.reason or "no rule applied",
             valid_to=w.valid_to,
+            valid_to_precision=w.valid_to_precision,
             score=w.score,
             confidence=w.confidence,
             superseded_by=w.superseded_by,

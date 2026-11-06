@@ -58,7 +58,9 @@ a system whose whole pitch is trustworthiness.
     "include_superseded_chain": true
   },
   "evidence": {
-    "min_confidence": 0.5,
+    "min_confidence": 0.4,              // verdict check 2 (docs/04)
+    "min_source_types": 1,              // verdict check 3: independent source types
+    "source_types": null,               // e.g. ["DIAGRAM","WIKI"]: show only these
     "require_citations": true,
     "max_spans_per_claim": 2
   },
@@ -121,52 +123,65 @@ accordingly. Recorded as forward work, not as a silent omission.
 
 ## Answer assembly
 
-The output format is the product. Every response is a list of claims, never prose
-with footnotes bolted on:
+The output format is the product. Every response is a list of statements, never prose
+with footnotes bolted on, and it is **split by verdict**
+([04](04-temporal-model.md#scoring-and-the-quality-filter)): `claims` holds only what an
+agent may state as current; `not_valid` holds everything else that matched, each with
+its status and the reason. Abridged real output (`uv run ncs query "does inventory still
+use redis?" --json`):
 
 ```jsonc
 {
-  "answer": "No. The Redis read cache was removed from the stock path on 2026-06-04.",
+  "answer": "inventory-service READS_FROM sqlite; inventory-service NOT READS_FROM redis",
   "claims": [
     {
-      "statement": "inventory-service reads availability directly from SQLite",
-      "status": "VALID", "valid_from": "2026-06-04", "valid_to": null,
-      "confidence": 0.96,
+      "text": "inventory-service READS_FROM sqlite",
+      "verdict": "VALID", "status": "VALID", "filtered_by": null, "confidence": 0.99,
+      "valid_from": "2026-06-01", "valid_to": null,
+      "reason": "no open contradiction; corroborated by 6 source types",
+      "score": {"authority": 0.8, "time_confidence": 1.0, "extractor_confidence": 0.95,
+                "settledness": 1.0, "freshness": 1.0, "score": 0.76},
       "citations": [
-        {"path": "docs/adr/003-stock-cache.md", "lines": [6,6], "hash": "9e1c…"},
-        {"path": "releases/2026-06-v1.3.md", "lines": [5,5], "hash": "41ab…"},
-        {"path": "apps/inventory-service/app.py", "lines": [61,85], "hash": "c07d…"}
-      ],
-      "corroborated_by": 3
-    },
-    {
-      "statement": "Core Platform owns Stock and its Redis read cache",
-      "status": "DEPRECATED", "valid_from": "2026-01-01", "valid_to": "2026-06-04",
-      "superseded_by": "docs/adr/003-stock-cache.md",
-      "citations": [{"path": "wiki/inventory-service.md", "lines": [5,5]}],
-      "note": "Stale documentation — accurate when written."
+        {"path": "vendor/att-hackathon-task/docs/adr/003-stock-cache.md", "lines": [6,6], "hash": "57ed…"},
+        {"path": "vendor/att-hackathon-task/releases/2026-06-v1.3.md", "lines": [5,5], "hash": "983e…"}
+      ]
     }
   ],
-  "conflicts": [],
-  "gaps": ["No test covers the post-removal availability path."],
-  "degraded": false
+  "not_valid": [
+    {
+      "text": "inventory-service READS_FROM redis",
+      "verdict": "NOT_VALID", "status": "DEPRECATED", "filtered_by": "STATUS", "confidence": 0.17,
+      "valid_from": "2026-01-01", "valid_to": "2026-06-04",
+      "reason": "superseded on 2026-06-04 by docs/adr/003-stock-cache.md:6",
+      "citations": [{"path": "vendor/att-hackathon-task/wiki/inventory-service.md", "lines": [5,5], "hash": "b762…"}],
+      "superseded_by": [{"path": "vendor/att-hackathon-task/docs/adr/003-stock-cache.md", "lines": [6,6], "hash": "57ed…"}]
+    }
+  ],
+  "conflicts": [], "gaps": [],
+  "degraded": true,
+  "degraded_reason": "lexical match over resolved claims; the CQP planner and graph traversal are not implemented yet"
 }
 ```
 
-Three deliberate properties:
+Four deliberate properties:
 
-1. **The deprecated claim is returned, not hidden.** An engineer who just read the
-   wiki needs to know why it disagrees. Suppression would produce a service that
-   seems to contradict the documentation for no stated reason.
-2. **`citations` are referential** — path, line range, and the file hash the range was
+1. **The deprecated claim is returned, not hidden** — in `not_valid`, with what replaced
+   it. An engineer who just read the wiki needs to know why it disagrees. Suppression
+   would produce a service that seems to contradict the documentation for no stated
+   reason. `status_in=[VALID]` (`valid_only`) drops the section when it is not wanted.
+2. **The split is the filter.** An agent reads `claims` as truth and `not_valid` as
+   warnings; it never has to interpret six statuses and a threshold itself. The MCP
+   server's instructions say exactly that ([07](07-api-and-mcp.md#mcp-tool-design)).
+3. **`citations` are referential** — path, line range, and the file hash the range was
    verified against. Never a title, never a paraphrase, and never stored prose: the
    caller resolves the text with `GET /v1/span?path=&start=&end=` (or the
-   `resolve_span` MCP helper), which re-checks the hash before returning bytes. This is
-   the AGENTS.md invariant and the rubric's "evidence-backed" in literal form, and it
-   keeps the graph free of duplicated text.
-3. **`gaps` and `degraded` are first-class.** Reporting what is *missing* and
+   `resolve_span` MCP helper), which re-checks the hash before returning bytes, wrapped
+   in `<untrusted_source>`. This is the AGENTS.md invariant and the rubric's
+   "evidence-backed" in literal form, and it keeps the graph free of duplicated text.
+4. **`gaps` and `degraded` are first-class.** Reporting what is *missing* and
    reporting when the service is operating below spec are both part of the brief, and
-   both are easy to quietly omit.
+   both are easy to quietly omit. Until the planner and graph traversal land, matching
+   is on entity keys only and every answer says so.
 
 ## Context budget
 
@@ -182,6 +197,7 @@ not advisory, and spending is ranked:
 4. Additional corroborating citations.
 5. Deprecated-claim detail.
 
-When the budget binds, the response carries `truncated: true` and a `continue_token`.
+When the budget binds, `not_valid` detail is trimmed first and `VALID` statements last,
+and the response carries `truncated: true`. A `continue_token` is not built yet.
 **The service returns the smallest sufficient answer, not everything it knows.** A
 Context Service that floods the window is just a slower `grep`.

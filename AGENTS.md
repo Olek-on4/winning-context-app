@@ -207,16 +207,19 @@ The repo must not drown in documentation. These rules are about keeping it small
 
 ## Commands
 
-Not yet implemented. These are the contracts the first app must satisfy; replace this
-section with the real, tested commands as each lands, and keep it current.
+Tested commands first; the rest are contracts not yet built.
 
 ```sh
-uv sync                        # install
-docker compose up -d neo4j     # store
-uv run ncs ingest              # walk → route → extract → validate → load
-uv run ncs resolve             # entity resolution → temporal → conflicts
-uv run ncs serve               # FastAPI on :8000
-uv run ncs-mcp                 # MCP server over stdio
-uv run pytest tests/golden -v  # the seven trap cases
-uv run ruff check . && uv run ruff format --check .
+uv sync                                    # install (Python 3.12, uv)
+uv run ncs ingest                          # fixtures → gate 1, gate 2, dating → data/local/claims.jsonl
+uv run ncs resolve [--as-of 2026-03-01]    # every claim with status, score, reason
+uv run ncs query "does inventory use redis?" [--as-of D] [--valid-only] [--json] \
+    [--source-type WIKI ...] [--min-source-types 2] [--min-confidence 0.5]
+uv run ncs-mcp                             # MCP over stdio: context_search, resolve_span (.mcp.json)
+uv run pytest -q                           # unit + golden traps (T4, T5 skipped: not built)
+uv run ruff check . && uv run ruff format --check . && uv run pyright
+
+# not built yet
+docker compose up -d neo4j                 # store
+uv run ncs serve                           # FastAPI on :8000
 ```

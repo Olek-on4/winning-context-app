@@ -1,7 +1,7 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
-"""score = authority × time_confidence × extractor_confidence × freshness.
+"""score = authority × time_confidence × extractor_confidence × settledness × freshness.
 Explained, with worked numbers, in docs/04-temporal-model.md#scoring."""
 
 from collections.abc import Iterable
@@ -22,13 +22,16 @@ def freshness(valid_from: date, later_contradictions: Iterable[date], cfg: Setti
 
 
 def score(claim: ClaimRecord, fresh: float, cfg: Settings) -> ScoreBreakdown:
-    authority = cfg.authority[claim.source_type]
+    authority = cfg.sources[claim.source_type].authority
     time_conf = cfg.time_confidence[claim.time_signal] if claim.time_signal else 0.0
-    value = authority * time_conf * claim.confidence * fresh
+    status = claim.declared_status
+    settled = cfg.doc_statuses[status].settledness if status else 1.0
+    value = authority * time_conf * claim.confidence * settled * fresh
     return ScoreBreakdown(
         authority=authority,
         time_confidence=time_conf,
         extractor_confidence=claim.confidence,
+        settledness=settled,
         freshness=round(fresh, 4),
         score=round(value, 4),
     )

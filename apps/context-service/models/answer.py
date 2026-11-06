@@ -8,7 +8,15 @@ from datetime import date
 from pydantic import BaseModel, ConfigDict, Field
 
 from models.claim import EntityRef, ScoreBreakdown
-from models.ontology import Polarity, Predicate, SourceType, Status, Verdict
+from models.ontology import (
+    FilterCode,
+    Polarity,
+    Precision,
+    Predicate,
+    SourceType,
+    Status,
+    Verdict,
+)
 
 _FROZEN = ConfigDict(frozen=True, extra="forbid")
 
@@ -24,19 +32,24 @@ class TimeFilter(BaseModel):
 
 
 class EvidenceFilter(BaseModel):
-    """The `evidence` block of the CQP. None means the configured default."""
+    """The `evidence` block of the CQP. None means the configured default.
+
+    `source_types` narrows what is shown ("only what diagrams say"); it never changes
+    how claims were resolved — a diagram claim is still judged against the ADR."""
 
     model_config = _FROZEN
     min_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    min_source_types: int | None = Field(default=None, ge=1)
+    source_types: list[SourceType] | None = None
 
 
 class Citation(BaseModel):
-    """`excerpt` is already wrapped in <untrusted_source> — corpus text is data."""
+    """A pointer, not prose. Fetch the text with resolve_span, which re-checks `hash`."""
 
     model_config = _FROZEN
     path: str
     lines: tuple[int, int]
-    excerpt: str
+    hash: str
     via: str | None = None
 
 
@@ -49,9 +62,11 @@ class Statement(BaseModel):
     polarity: Polarity
     verdict: Verdict
     status: Status
+    filtered_by: FilterCode | None
     reason: str
     valid_from: date | None
     valid_to: date | None
+    valid_to_precision: Precision | None
     confidence: float
     score: ScoreBreakdown
     source_types: list[SourceType]
