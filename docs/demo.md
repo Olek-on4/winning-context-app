@@ -6,6 +6,23 @@ the deterministic claims are recomputed from migrations and `config/ports.json`.
 
 ## Bring-up (2 minutes, before the room fills)
 
+**Containers, primary.** Three containers, two commands; the corpus is mounted read-only, so
+a run cannot mutate the submodule.
+
+```sh
+make docker-up     # neo4j + ollama + app in containers
+make docker-demo   # pull the model, then extract -> load -> index inside etyt-app
+```
+
+`etyt-app` runs `cli serve` from its image, so the API is on `http://127.0.0.1:8000` once
+its healthcheck passes. `make docker-demo` ends by printing the query to send.
+The first run is the slow one: it pulls `nomic-embed-text` (~274 MB) into the
+`ollama-models` volume and embeds on CPU — this host has no nvidia runtime — so do it before
+the room fills. Later re-index: `make docker-index`. Neo4j browser is on
+`http://127.0.0.1:7474` (`neo4j` / `etyt-context`), Ollama on `http://127.0.0.1:11435`.
+
+**Host, fallback** — Python 3.12 + `uv`, Neo4j in Docker, Ollama on the host:
+
 ```sh
 make up                                    # neo4j:5-community
 make extract                               # 17 deterministic claims

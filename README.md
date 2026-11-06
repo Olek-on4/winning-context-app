@@ -20,7 +20,9 @@ plan compiled to parameterised Cypher — the model never writes a query.
 
 ## Status
 
-**Design frozen, not yet implemented.** Start at **[docs/README.md](docs/README.md)**.
+**The spine runs.** Four pipelines, six intents, three MCP tools, seven corpus traps
+answered end to end with citations; `make check` is the gate. Design record:
+**[docs/README.md](docs/README.md)**.
 
 - [docs/02-architecture.md](docs/02-architecture.md) — the system end to end
 - [docs/03-ontology.md](docs/03-ontology.md) — how knowledge is represented
@@ -86,21 +88,23 @@ make demo    # up extract load index, then print the query to run
 make serve   # REST on :8000
 ```
 
-**Containers** — Neo4j and the service both in Docker, corpus mounted read-only:
+**Containers** — Neo4j, Ollama and the service all in Docker, corpus mounted read-only:
 
 ```sh
-make docker-up     # build + start etyt-neo4j and etyt-app
-make docker-demo   # the same pipeline, inside etyt-app
+make docker-up     # build + start etyt-neo4j, etyt-ollama, etyt-app
+make docker-demo   # pull the model, then the same pipeline inside etyt-app
 ```
 
 | Container | Role |
 |---|---|
 | `etyt-neo4j` | `neo4j:5-community`; browser on `http://127.0.0.1:7474`, auth `neo4j` / `etyt-context` |
+| `etyt-ollama` | `ollama/ollama` on `http://127.0.0.1:11435` (11434 belongs to a host-side Ollama) |
 | `etyt-app` | the Context Service; REST + MCP; `http://127.0.0.1:8000` |
 
-`OLLAMA_HOST` is unset inside `etyt-app` by default, so a container run indexes lexically
-(`{"embedded": false}`) unless it is passed in. Full rehearsal script:
-[docs/demo.md](docs/demo.md).
+The model lives in a volume, so it is pulled once — `make docker-demo` does it, and
+`make docker-index` re-indexes inside `etyt-app` after that. Inference is CPU-only on this
+host: there is no nvidia runtime, so the GPU block in the compose file stays commented out.
+Full rehearsal script: [docs/demo.md](docs/demo.md).
 
 ## Corpus facts
 

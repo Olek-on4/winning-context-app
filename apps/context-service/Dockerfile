@@ -23,11 +23,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
 WORKDIR /app
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
-    CORPUS_ROOT=/corpus \
     NEO4J_URI=bolt://neo4j:7687 \
     HOST=0.0.0.0 \
     PORT=8000
 COPY --from=build /app /app
-# The corpus is mounted read-only at /corpus; nothing is written outside the graph.
+# The corpus comes from the compose mount; nothing is written outside the graph.
 EXPOSE 8000
 CMD ["python", "-m", "cli", "serve"]

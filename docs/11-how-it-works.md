@@ -140,6 +140,19 @@ Everything is local: Neo4j in Docker, `nomic-embed-text` for vectors, `llama3.2`
 as a planner fallback ([local-model.md](local-model.md)). With no model at all, retrieval
 degrades to lexical search and the answer says `degraded`.
 
+The same pipeline runs entirely in containers — `etyt-neo4j`, `etyt-ollama` and `etyt-app`,
+with the corpus mounted read-only:
+
+```sh
+make docker-up     # neo4j + ollama + app in containers
+make docker-demo   # pull the model, then the pipeline inside etyt-app
+make docker-index  # re-chunk inside etyt-app (embeds via etyt-ollama)
+```
+
+`etyt-app` talks to Neo4j as `neo4j` / `etyt-context`; the Neo4j browser is on
+`http://127.0.0.1:7474` and the API stays on `http://127.0.0.1:8000`. Ollama is CPU-only
+here (no nvidia runtime), so embeddings are slow but present.
+
 ## What is honestly not built yet
 
 - Only three extractors exist. YAML config and the `api-specs/history` / `archive` path

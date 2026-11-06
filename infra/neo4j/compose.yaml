@@ -59,9 +59,9 @@ services:
       NEO4J_USER: neo4j
       NEO4J_PASSWORD: etyt-context
       CORPUS_ROOT: /repo/vendor/att-hackathon-task
-      # The sibling service, so indexing inside the container embeds instead of
-      # degrading to lexical-only. Override to reach a host-side Ollama instead.
-      OLLAMA_HOST: ${OLLAMA_HOST:-http://etyt-ollama:11434}
+      # Literal, not ${OLLAMA_HOST}: shells that export OLLAMA_HOST=localhost:11434
+      # would make the container resolve it to itself and silently go lexical-only.
+      OLLAMA_HOST: http://etyt-ollama:11434
       OLLAMA_EMBED_MODEL: nomic-embed-text
       EXTRACTED_PATH: /data/local/claims-extracted.jsonl
     volumes:

@@ -101,9 +101,14 @@ def sweep(driver: Driver, root: Root, keep: set[str]) -> int:
     return removed
 
 
-def index(driver: Driver, roots: list[Root], embed=None) -> int:
-    """Write chunks for every root; `embed(text) -> list[float] | None` adds vectors."""
+def index(driver: Driver, roots: list[Root], embed=None, progress=None) -> int:
+    """Write chunks for every root; `embed(text) -> list[float] | None` adds vectors.
+
+    `progress(done, total)` exists because CPU embedding takes minutes, and a silent
+    wait looks like a hang.
+    """
     written = 0
+    total = sum(len(chunks_for(root)) for root in roots) if embed is not None else 0
     batch: list[dict] = []
     for root in roots:
         current = chunks_for(root)
@@ -118,9 +123,13 @@ def index(driver: Driver, roots: list[Root], embed=None) -> int:
                 _flush(driver, batch)
                 written += len(batch)
                 batch = []
+                if progress and total:
+                    progress(written, total)
     if batch:
         _flush(driver, batch)
         written += len(batch)
+    if progress and total:
+        progress(written, total)
     return written
 
 
