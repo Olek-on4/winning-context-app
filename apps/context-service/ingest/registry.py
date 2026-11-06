@@ -217,12 +217,18 @@ class DeployConfig:
         common = dict(observed_at=observed, valid_from=observed, confidence=1.0,
                       authority=1.0, source_type=SourceType.CONFIG, extractor=self.name)
         if path.name == "package.json":
-            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-                match = self.DEP_NAME.search(line)
-                if match:
-                    yield _claim(root, path, number, digest,
-                                 subject=EntityRef(kind="Package", key=path.parent.name or "root"),
-                                 predicate="DEPENDS_ON", object=match.group(1), **common)
+            # Parse the manifest: a regex over JSON lines counts `"version": "1.0.0"`
+            # as a dependency, which it is not.
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (ValueError, OSError):
+                return
+            package = path.parent.name or "root"
+            for section in ("dependencies", "devDependencies", "peerDependencies"):
+                for name in (data.get(section) or {}):
+                    yield _claim(root, path, _line_containing(path, name), digest,
+                                 subject=EntityRef(kind="Package", key=package),
+                                 predicate="DEPENDS_ON", object=name, **common)
             return
         if path.name == "CODEOWNERS":
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
