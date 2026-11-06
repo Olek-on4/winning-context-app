@@ -298,7 +298,9 @@ def _as_of_view(claims: list[dict], as_of: str) -> list[dict]:
     view: list[dict] = []
     for claim in claims:
         started = claim.get("valid_from")
-        if started and started > as_of:
+        if not started or started > as_of:
+            # Undated claims cannot be placed on a timeline, so they are not shown as if
+            # they existed at that date. They remain in the default (current) view.
             continue
         ended = claim.get("valid_to")
         if ended and ended <= as_of:

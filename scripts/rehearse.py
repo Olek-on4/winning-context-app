@@ -95,8 +95,11 @@ def main() -> int:
               "docs/adr/003-stock-cache.md" in {c["path"] for claim in t1["claims"] for c in claim["citations"]})
 
         past = post("/v1/query", {"question": "Does inventory-service still use a Redis cache?", "as_of": "2026-03-01"})
-        check("time travel flips the answer",
-              "Redis" in past["answer"] or "redis" in past["answer"], past["answer"][:70])
+        past_rows = {c["statement"]: c["status"] for c in past["claims"]}
+        redis_valid = any("redis" in name and status == "VALID" for name, status in past_rows.items())
+        sqlite_hidden = not any("sqlite" in name for name in past_rows)
+        check("time travel: redis VALID, sqlite absent in March", redis_valid and sqlite_hidden,
+              f"{sorted(past_rows)}")
 
         t2 = post("/v1/query", {"question": "What fields does the users table have?"})
         check("T2 shows account_status", any("account_status" in c["statement"] for c in t2["claims"]))
