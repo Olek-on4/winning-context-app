@@ -19,6 +19,7 @@ pytestmark = pytest.mark.integration
 REPO = Path(__file__).resolve().parents[4]
 CORPUS = REPO / "vendor" / "att-hackathon-task"
 FIXTURES = REPO / "data" / "fixtures" / "claims-sample.jsonl"
+EXTRACTED = REPO / "data" / "local" / "claims-extracted.jsonl"
 
 
 @pytest.fixture(scope="module")
@@ -33,7 +34,18 @@ def service():
     except Exception:  # noqa: BLE001 - any connection failure means "skip"
         pytest.skip("Neo4j not reachable")
 
-    claims = [ClaimRecord.model_validate_json(line) for line in FIXTURES.read_text().splitlines() if line.strip()]
+    # Both sources on purpose: deterministic extraction and reviewed fixtures must
+    # coexist in one graph, or the demo is testing a dataset nobody ships.
+    from ingest.deterministic import extract
+
+    paths = [FIXTURES] + ([EXTRACTED] if EXTRACTED.is_file() else [])
+    claims = [
+        ClaimRecord.model_validate_json(line)
+        for path in paths
+        for line in path.read_text().splitlines()
+        if line.strip()
+    ]
+    claims.extend(extract(CORPUS))
     apply_schema(driver)
     with driver.session() as session:
         session.run("MATCH (n) DETACH DELETE n").consume()

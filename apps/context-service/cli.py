@@ -4,6 +4,7 @@
     uv run python -m cli mcp            # MCP over stdio
     uv run python -m cli load <file>    # claims JSONL into the graph
     uv run python -m cli index          # chunk the corpus for hybrid search
+    uv run python -m cli extract        # deterministic claims from migrations + ports
 
 No business logic here — every line is wiring.
 """
@@ -15,6 +16,7 @@ import os
 from pathlib import Path
 
 from graph.chunks import index as index_chunks
+from ingest.deterministic import extract
 from graph.loader import apply_schema, connect, load
 from models.claim import ClaimRecord
 from retrieval.service import ContextService
@@ -57,6 +59,16 @@ def serve_mcp() -> None:
     run(_service())
 
 
+def extract_claims() -> None:
+    """`... cli extract`: deterministic claims from migrations and ports.json."""
+    root = _corpus_root()
+    claims = extract(root)
+    out = Path(os.getenv("EXTRACTED_PATH", "../../data/local/claims-extracted.jsonl"))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(c.model_dump_json() for c in claims) + "\n", encoding="utf-8")
+    print(json.dumps({"claims": len(claims), "path": str(out)}))
+
+
 def index_corpus() -> None:
     """`... cli index`: chunk the corpus and fill the BM25 index (no model needed)."""
     driver = _driver()
@@ -81,6 +93,8 @@ if __name__ == "__main__":
         serve()
     elif command == "mcp":
         serve_mcp()
+    elif command == "extract":
+        extract_claims()
     elif command == "index":
         index_corpus()
     elif command == "load" and rest:
