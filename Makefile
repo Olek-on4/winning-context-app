@@ -48,3 +48,6 @@ gpu: ## is the model actually on the card?
 
 install-hooks: ## point git at .githooks
 	bash scripts/install-hooks.sh
+
+issues: ## file the work queue as issues, skipping titles that already exist
+	bash scripts/file-issues.sh
