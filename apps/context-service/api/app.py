@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -75,6 +76,10 @@ def create_app(service: ContextBackend, web_dist: Path | None = None) -> FastAPI
     # Mounted last so /v1/* and /healthz are matched before the static files.
     web = web_dist or _web_dist()
     if web is not None and web.is_dir():
+        print(f"web ui: {web}", file=sys.stderr, flush=True)
         app.mount("/", StaticFiles(directory=web, html=True), name="web")
+    else:
+        # A missing build looks like a dead server from the browser; say it on stdout.
+        print("web ui: disabled (no dist) — run `make ui-build`", file=sys.stderr, flush=True)
 
     return app

@@ -41,8 +41,10 @@ serve: ## REST on :8000 (API only; use `make ui` for the web page)
 ui-build: ## npm ci + vite build into etynt_gui/dist
 	cd etynt_gui && { test -d node_modules || npm ci; } && npm run build
 
-ui: ## build the web UI, then serve page + API on :8000
-	cd etynt_gui && { test -d node_modules || npm ci; } && npm run build
+ui: ## build the web UI when stale, then serve page + API on :8000
+	@test -f etynt_gui/dist/index.html \
+	  && [ -z "$$(find etynt_gui/src etynt_gui/index.html -newer etynt_gui/dist/index.html)" ] \
+	  || $(MAKE) --no-print-directory ui-build
 	cd $(APP) && WEB_DIST=$$PWD/../../etynt_gui/dist uv run python -m cli serve
 
 mcp: ## MCP over stdio
