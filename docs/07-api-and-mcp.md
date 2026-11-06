@@ -40,10 +40,12 @@ So: **three workflow tools**, one per CQP intent the demo actually exercises. No
 | Tool | For the agent's question | Returns |
 |---|---|---|
 | `context_search` | "what do we know about X?" | ranked claims + citations + status |
-| `context_explain_relationship` | "how do A and B connect?" | paths, each hop with evidence and dates |
-| `context_risks` | "what's unsafe here?" | risks + CWE + corroboration status + the safe pattern |
+| `context_explain_relationship` | "how do A and B connect?" | linked claims, one hop, each with evidence and dates |
+| `context_risks` | "what's unsafe here?" | claims of a violation or prohibition + evidence + status |
 
-Shared parameters across all three: `as_of`, `status_in`, `token_budget`, `max_hops`.
+Shared parameters across all three: `question`, `as_of`, `status_in`, `token_budget`.
+No `max_hops` — the templates are fixed at one hop; hop caps live in the CQP behind
+`POST /v1/query`.
 An agent that learns one tool has learned all three. `context_conflicts`,
 `context_timeline` and `context_impact_of_change` exist as CQP intents behind
 `POST /v1/query` and are promoted to tools only when an agent needs them.

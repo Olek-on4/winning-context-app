@@ -36,7 +36,16 @@ export default function DeveloperView() {
   const [, force] = useState(0)
 
   useEffect(() => {
-    api.mcpTools().then(setTools).catch((e: Error) => setError(e.message))
+    api
+      .mcpTools()
+      .then((list) => {
+        setTools(list)
+        // Seed the first tool's fields: an empty form posts no `question` and the
+        // server rightly rejects it.
+        const first = list.find((t) => t.name === name) ?? list[0]
+        if (first) setValues(seed(first))
+      })
+      .catch((e: Error) => setError(e.message))
     const off = api.subscribe(() => force((n) => n + 1))
     return () => {
       off()

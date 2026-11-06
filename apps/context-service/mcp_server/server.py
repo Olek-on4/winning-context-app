@@ -91,7 +91,7 @@ def build_server(service: ContextBackend) -> MCPServer:
         status_in: list[str] | None = None,
         token_budget: int = 2000,
     ) -> str:
-        """How do A and B connect? Paths with per-hop evidence and dates."""
+        """How do A and B connect? Claims linking them, one hop, with evidence and dates."""
         return context_explain_relationship(
             service, question, as_of=as_of, status_in=status_in, token_budget=token_budget
         )
@@ -103,7 +103,7 @@ def build_server(service: ContextBackend) -> MCPServer:
         status_in: list[str] | None = None,
         token_budget: int = 2000,
     ) -> str:
-        """What is unsafe here? Risks with corroboration status and the safe pattern."""
+        """What is unsafe here? Claims of a violation or prohibition, with status and citations."""
         return context_risks(service, question, as_of=as_of, status_in=status_in, token_budget=token_budget)
 
     @server.tool(name="resolve_span")

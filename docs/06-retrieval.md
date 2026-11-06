@@ -72,10 +72,10 @@ Six intents, each mapping to exactly one compiler template:
 |---|---|---|
 | `LOOKUP` | "what is X" | anchor + 1-hop + claims |
 | `STATE_OF` | "does X still use Y" | anchor + predicate filter + full status history |
-| `RELATIONSHIP` | "how do X and Y connect" | bidirectional shortest paths ≤3, all evidence |
+| `RELATIONSHIP` | "how do X and Y connect" | anchor + predicate filter, one hop, all evidence |
 | `CONFLICTS` | "what disagrees about X" | `CONTRADICTS` subgraph, both sides |
 | `TIMELINE` | "how did X change" | all claims about X ordered by `valid_from` |
-| `RISKS` | "what's unsafe in X" | `Risk` subgraph + corroboration status |
+| `RISKS` | "what's unsafe in X" | anchor OR `VIOLATES`/`PROHIBITS` predicate, anchored claims first |
 
 The planner's entire job is: pick one of six intents, extract anchors, set a time
 filter. That is a *classification and slot-filling* task, which is what small local

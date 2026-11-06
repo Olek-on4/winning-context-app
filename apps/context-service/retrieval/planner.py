@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 from datetime import date
 
 import httpx
@@ -51,6 +52,7 @@ _IDENTIFIERS = (
     re.compile(r"\b[a-z][a-z0-9]*(?:-[a-z0-9]+)+\b"),
     re.compile(r"\b[a-z]+(?:[A-Z][a-z0-9]+)+\b"),
     re.compile(r"\b\d{4,5}\b"),
+    re.compile(r"/[A-Za-z0-9][A-Za-z0-9._/-]{1,80}"),  # REST paths: /v1/accounts
 )
 
 
@@ -66,12 +68,19 @@ def plan(question: str, intent: str | None = None, model: bool = True) -> CQP:
         result = _keywords(question, intent)
     except Exception:
         result = None
-    if model and (result is None or _unanchored(result)):
+    # A question without a quoted, dotted, dashed or CamelCase identifier names nothing
+    # the keyword planner can type, so it gets one model attempt. With an identifier the
+    # deterministic plan wins and the model is never called (ADR-0005).
+    if model and not _names_an_identifier(question):
         try:
             modelled = _from_model(question)
-        except Exception:
+        except Exception as exc:
+            _warn_model(exc)
             modelled = None
-        if modelled is not None:
+        # The model refines, it never replaces: only a typed anchor (a Service, Table or
+        # Endpoint it recognised) beats the keyword plan. An all-ANY model plan lost
+        # evidence on the accounts and payments questions, so it is discarded.
+        if modelled is not None and any(a.kind != "ANY" for a in modelled.anchors):
             result = modelled
     if result is None:
         return _safe(question)
@@ -109,7 +118,31 @@ def _from_model(question: str) -> CQP:
     }
     response = httpx.post(f"{host}/api/generate", json=payload, timeout=timeout)
     response.raise_for_status()
-    return validate_plan(json.loads(_strip_fences(response.json()["response"])))
+    return validate_plan(_repair(json.loads(_strip_fences(response.json()["response"]))))
+
+
+def _repair(payload: dict) -> dict:
+    """Model output is untrusted: fix the shape, never the meaning.
+
+    An anchor carries `key` or `text`, never both and never neither; a small model fills
+    both with the same word, which the schema rejects. `time.as_of` is a calendar date —
+    models like to append a time and a zone. Nothing here invents a value.
+    """
+    time = payload.get("time")
+    if isinstance(time, dict) and isinstance(time.get("as_of"), str):
+        raw = time["as_of"].strip()
+        payload = {**payload, "time": {**time, "as_of": raw[:10] if len(raw) >= 10 and raw[4] == "-" else None}}
+    anchors = []
+    for anchor in payload.get("anchors") or []:
+        if not isinstance(anchor, dict):
+            continue
+        key = (anchor.get("key") or "").strip() or None
+        text = (anchor.get("text") or "").strip() or None
+        if key:
+            anchors.append({**anchor, "key": key, "text": None})
+        elif text:
+            anchors.append({**anchor, "key": None, "text": text})
+    return {**payload, "anchors": anchors}
 
 
 def _prompt(question: str) -> str:
@@ -163,9 +196,20 @@ def _keywords(question: str, intent: str | None = None) -> CQP:
     )
 
 
-def _unanchored(cqp: CQP) -> bool:
-    """True when the plan names nothing: only then is a model plan worth the round trip."""
-    return not any(anchor.key for anchor in cqp.anchors)
+def _names_an_identifier(question: str) -> bool:
+    """True when the question carries something the keyword planner can type exactly."""
+    return any(pattern.search(question) for pattern in _IDENTIFIERS)
+
+
+_MODEL_WARNED: set[str] = set()
+
+
+def _warn_model(exc: Exception) -> None:
+    """One line per distinct failure: a silent fallback looks like a healthy planner."""
+    key = f"{type(exc).__name__}: {exc}"[:200]
+    if key not in _MODEL_WARNED:
+        _MODEL_WARNED.add(key)
+        print(f"planner: model unavailable, using the deterministic plan ({key})", file=sys.stderr, flush=True)
 
 
 def _forced_intent(intent: str | None) -> Intent | None:

@@ -104,6 +104,23 @@ measured on 2026-11-06, a model-first planner lost traps G3 and G7 and invented 
 `time.as_of` of `2022-01-01` for a question with no date, which silently filtered every
 current claim out. `plan(..., model=False)` skips even that fallback.
 
+The gate and the repair are explicit, because both were learned the hard way:
+
+- **Gate** — the model is consulted only when the question carries no identifier the
+  keyword planner can type: no quoted or backticked token, no `SNAKE_CASE`, no
+  `kebab-case`, no CamelCase, no number, no `/rest/path`. Otherwise the deterministic
+  plan answers in ~3 ms and the model is never called. Measured 2026-11-06:
+  3 ms vs 1.6 s on the same service.
+- **Repair** — model output is untrusted and is fixed only in shape: an anchor keeps
+  `key` or `text`, never both; a `time.as_of` that arrives as a timestamp is truncated
+  to a date; anything unparseable becomes `null` and is then dropped by the rule above.
+  No value is invented.
+- **Guard** — a repaired model plan is adopted only if it types an anchor (a Service,
+  Table or Endpoint). An all-`ANY` plan is discarded: it lost evidence on G3 and G7.
+
+Tests never see the model: `tests/conftest.py` stubs `_from_model` to raise, and
+`ETYT_TEST_MODEL=1` opts back in when the model path itself is under test.
+
 ## 6. Known limits, said out loud
 
 - One laptop, one GPU: this is not a serving architecture. Concurrency is Ollama's.

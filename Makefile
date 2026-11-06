@@ -21,6 +21,7 @@ docker-index: ## chunk the corpus inside the app container (embeds via etyt-olla
 
 docker-demo: docker-up ## whole stack in docker, then print the query to run
 	$(COMPOSE) exec -T ollama ollama pull nomic-embed-text
+	@$(COMPOSE) exec -T ollama ollama pull llama3.2 || echo "planner model not pulled: deterministic plan only"
 	$(COMPOSE) exec -T app python -m cli extract
 	$(COMPOSE) exec -T app python -m cli load /repo/data/fixtures/claims-sample.jsonl /data/local/claims-extracted.jsonl
 	$(COMPOSE) exec -T app python -m cli index
