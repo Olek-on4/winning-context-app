@@ -166,7 +166,10 @@ Three deliberate properties:
    keeps the graph free of duplicated text.
 3. **`gaps` and `degraded` are first-class.** Reporting what is *missing* and
    reporting when the service is operating below spec are both part of the brief, and
-   both are easy to quietly omit.
+   both are easy to quietly omit. Search reports per channel (`ok` / `empty` / `error`),
+   so a dead vector index surfaces as `Search channel unavailable: vector` instead of
+   looking identical to a healthy lexical one. `degraded` stays reserved for the case
+   where the answer actually got smaller.
 
 ## Context budget
 

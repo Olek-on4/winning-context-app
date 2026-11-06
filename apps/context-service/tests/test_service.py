@@ -272,12 +272,27 @@ class IndexDriver:
 def test_hybrid_fuses_bm25_and_vector_with_rrf(monkeypatch):
     monkeypatch.setattr(hybrid, "_embed", lambda text: [0.0] * 768)
 
-    chunks, degraded = hybrid.search(IndexDriver(), "redis", k=5)
+    chunks, degraded, status = hybrid.search(IndexDriver(), "redis", k=5)
 
     assert degraded is False
+    assert status == {"bm25": "ok", "vector": "ok"}
     assert {chunk["via"] for chunk in chunks} == {"bm25", "vector"}
     assert all(chunk["score"] > 0 for chunk in chunks)
     assert [chunk["path"] for chunk in chunks] == ["docs/b.md", "wiki/a.md"]
+
+
+def test_dead_vector_channel_is_reported_not_hidden(monkeypatch):
+    """The embedding failure that shipped silently: BM25 answers, so `degraded` stayed
+    false and the vector index could be empty for days without anyone noticing."""
+    monkeypatch.setattr(
+        hybrid, "_embed", lambda text: (_ for _ in ()).throw(RuntimeError("no embed"))
+    )
+
+    chunks, degraded, status = hybrid.search(IndexDriver(), "redis", k=5)
+
+    assert chunks, "the lexical channel still answers"
+    assert status == {"bm25": "ok", "vector": "error"}
+    assert degraded is True
 
 
 def test_hybrid_with_no_index_data_is_degraded(monkeypatch):
@@ -287,7 +302,7 @@ def test_hybrid_with_no_index_data_is_degraded(monkeypatch):
         def run(self, query, **params):
             return []
 
-    assert hybrid.search(EmptyDriver(), "redis") == ([], True)
+    assert hybrid.search(EmptyDriver(), "redis") == ([], True, {"bm25": "empty", "vector": "empty"})
 
 
 def test_empty_graph_falls_back_to_evidence_candidates_not_claims(corpus):
@@ -297,3 +312,15 @@ def test_empty_graph_falls_back_to_evidence_candidates_not_claims(corpus):
 
     assert result["claims"] == []
     assert any("evidence candidates" in gap or "No claims matched" in gap for gap in result["gaps"])
+
+
+def test_envelope_names_the_channel_that_failed(corpus, monkeypatch):
+    """A user reading `gaps` must be able to tell a smaller answer from a broken one."""
+    monkeypatch.setattr(
+        hybrid, "_embed", lambda text: (_ for _ in ()).throw(RuntimeError("no embed"))
+    )
+
+    result = ContextService(FakeDriver([]), corpus).answer(QUESTION, intent="LOOKUP")
+
+    assert result["degraded"] is True
+    assert any("Search channel unavailable: vector" in gap for gap in result["gaps"])

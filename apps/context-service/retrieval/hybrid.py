@@ -34,24 +34,34 @@ LIMIT $k
 _LUCENE_SPECIAL = re.compile(r'([+\-&|!(){}\[\]^"~*?:\\/])')
 
 
-def search(driver, text: str, k: int = 10) -> tuple[list[dict], bool]:
-    """Return (fused chunks, degraded). Degraded means neither index produced a row."""
+def search(driver, text: str, k: int = 10) -> tuple[list[dict], bool, dict[str, str]]:
+    """Return (fused chunks, degraded, channel status).
+
+    Status is `ok` (rows), `empty` (ran, no rows) or `error` (raised) per channel. A dead
+    channel used to be invisible: `degraded` only reported the case where *both* were
+    empty, so an index holding no vectors looked the same as a healthy lexical one.
+    """
     query = (text or "").strip()
     if not query or k < 1:
-        return [], True
+        return [], True, {}
 
     channels: list[list[dict]] = []
-    try:
-        channels.append(_bm25(driver, query, k))
-    except Exception:
-        pass
-    try:
-        channels.append(_vector(driver, _embed(query), k))
-    except Exception:
-        pass
+    status: dict[str, str] = {}
+    for name, run in (
+        ("bm25", lambda: _bm25(driver, query, k)),
+        ("vector", lambda: _vector(driver, _embed(query), k)),
+    ):
+        try:
+            rows = run()
+        except Exception:  # a channel that fails is reported, never fatal
+            status[name] = "error"
+            continue
+        status[name] = "ok" if rows else "empty"
+        if rows:
+            channels.append(rows)
 
     if not any(channels):
-        return [], True
+        return [], True, status
 
     scores: dict[tuple, float] = {}
     items: dict[tuple, dict] = {}
@@ -70,7 +80,7 @@ def search(driver, text: str, k: int = 10) -> tuple[list[dict], bool]:
         chunk["score"] = round(scores[key], 6)
         chunk["via"] = "+".join(sorted(vias[key]))
         fused.append(chunk)
-    return fused, False
+    return fused, any(state == "error" for state in status.values()), status
 
 
 def _bm25(driver, text: str, k: int) -> list[dict]:

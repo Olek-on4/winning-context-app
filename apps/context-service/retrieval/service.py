@@ -96,7 +96,10 @@ class ContextService:
             rows = []
             degraded = True
             gaps.append(f"Graph query failed ({type(exc).__name__}).")
-            chunks, _ = _hybrid(self.driver, question)
+            chunks, _, channel_status = _hybrid(self.driver, question)
+            failed = sorted(name for name, state in channel_status.items() if state == "error")
+            if failed:
+                gaps.append(f"Search channel unavailable: {', '.join(failed)}.")
             if chunks:
                 top = chunks[0]
                 where = (
@@ -113,7 +116,10 @@ class ContextService:
         if not rows:
             # Nothing in the graph: say what the text search still found, without
             # promoting a chunk to a claim.
-            chunks, chunk_degraded = _hybrid(self.driver, question)
+            chunks, chunk_degraded, channel_status = _hybrid(self.driver, question)
+            failed = sorted(name for name, state in channel_status.items() if state == "error")
+            if failed:
+                gaps.append(f"Search channel unavailable: {', '.join(failed)}.")
             if chunks:
                 listed = ", ".join(
                     f"{c['path']}:{c['lines'][0]}" if c["lines"] else c["path"] for c in chunks[:3]
@@ -255,12 +261,12 @@ def _execute(driver, cypher: str, params: dict) -> list[dict]:
         return [dict(record) for record in result]
 
 
-def _hybrid(driver, question: str) -> tuple[list[dict], bool]:
+def _hybrid(driver, question: str) -> tuple[list[dict], bool, dict[str, str]]:
     # The graph call failed, so the same driver may be unavailable too; degrade quietly.
     try:
         return hybrid.search(driver, question)
     except Exception:
-        return [], True
+        return [], True, {}
 
 
 def _overridden(base: CQP, as_of, status_in, token_budget) -> CQP:
