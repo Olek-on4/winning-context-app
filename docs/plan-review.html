@@ -18,12 +18,12 @@
   .rv-rule { border-left: 3px solid var(--color-primary); padding-left: .75rem; }
   .rv-eq { display: inline-block; padding: 0 .4rem; border-radius: .25rem; background: color-mix(in oklch, var(--color-base-content) 8%, transparent); }
   .rv-num { font-variant-numeric: tabular-nums; }
-  /* 5-hour track: dashed marker at 40% (CP1), solid at 75% (freeze) */
+  /* 5-hour track: marker at 40% (CP1), solid at 70% (freeze 03:30) */
   .rv-track {
     position: relative; height: 0.65rem; border-radius: .2rem;
     background:
       linear-gradient(to right, transparent calc(40% - 1px), color-mix(in oklch, var(--color-warning) 60%, transparent) calc(40% - 1px), color-mix(in oklch, var(--color-warning) 60%, transparent) calc(40% + 1px), transparent calc(40% + 1px)),
-      linear-gradient(to right, transparent calc(75% - 1px), color-mix(in oklch, var(--color-error) 80%, transparent) calc(75% - 1px), color-mix(in oklch, var(--color-error) 80%, transparent) calc(75% + 1px), transparent calc(75% + 1px)),
+      linear-gradient(to right, transparent calc(70% - 1px), color-mix(in oklch, var(--color-error) 80%, transparent) calc(70% - 1px), color-mix(in oklch, var(--color-error) 80%, transparent) calc(70% + 1px), transparent calc(70% + 1px)),
       color-mix(in oklch, var(--color-base-content) 8%, transparent);
   }
   .rv-bar { position: absolute; top: 0; bottom: 0; border-radius: .2rem; background: var(--color-primary); }
@@ -37,16 +37,17 @@
   <header class="flex flex-col gap-4">
     <div class="flex flex-wrap items-center gap-2">
       <span class="badge badge-primary badge-sm">plan review</span>
-      <span class="badge badge-ghost badge-sm">docs v0.1 · frozen 2026-11-06</span>
+      <span class="badge badge-ghost badge-sm">docs v1.0 · frozen 2026-11-06</span>
       <span class="badge badge-ghost badge-sm">corpus 612cc0b · 373 tracked files</span>
       <span class="badge badge-outline badge-sm">reviewed against source, not the summary</span>
+      <span class="badge badge-success badge-sm">scope frozen · ADR-0006</span>
     </div>
-    <h1 class="text-3xl lg:text-5xl font-bold leading-tight">Northstar Context Service — the plan, and the four things that will bite</h1>
+    <h1 class="text-3xl lg:text-5xl font-bold leading-tight">Northstar Context Service — the plan, five resolved blockers, and the frozen scope</h1>
     <p class="max-w-4xl text-base-content/80 leading-relaxed">
-      Eleven design documents (2 633 lines) describe an evidence-backed, time-aware context service over the
-      AT&amp;T corpus. This page is the review: the six pillars it actually rests on, the machine that makes
-      claims trustworthy, the queries it wins, who builds which lane, and the concrete places where the
-      documents disagree with the corpus or with their own five-hour budget.
+      Twelve design documents (2 734 lines) and six ADRs describe an evidence-backed, time-aware context
+      service over the AT&amp;T corpus. This page is the review: the six pillars it rests on, the machine that
+      makes claims trustworthy, the queries it wins, who builds which lane, and the five blockers that stood
+      between that design and a five-hour build — all now closed and frozen in ADR-0006.
     </p>
   </header>
 
@@ -62,22 +63,22 @@
     <div class="card bg-base-200 border border-base-content/10">
       <div class="card-body p-5 gap-1">
         <div class="text-xs uppercase tracking-wider text-base-content/50">Schedule fit</div>
-        <div class="text-2xl font-bold text-error">Zero slack</div>
-        <div class="text-sm text-base-content/70">Two workstreams end at or past the feature freeze.</div>
+        <div class="text-2xl font-bold text-success">Slack bought</div>
+        <div class="text-sm text-base-content/70">Pure layers pre-built; day-of is wiring. Freeze 03:30.</div>
       </div>
     </div>
     <div class="card bg-base-200 border border-base-content/10">
       <div class="card-body p-5 gap-1">
         <div class="text-xs uppercase tracking-wider text-base-content/50">Internal consistency</div>
-        <div class="text-2xl font-bold text-warning">3 drifts</div>
-        <div class="text-sm text-base-content/70">Tool count, reranker, and one citation that fails its own gate.</div>
+        <div class="text-2xl font-bold text-success">Coherent</div>
+        <div class="text-sm text-base-content/70">Every drift closed: tools 3, no reranker, spine marked in 02/05/08.</div>
       </div>
     </div>
     <div class="card bg-base-200 border border-base-content/10">
       <div class="card-body p-5 gap-1">
         <div class="text-xs uppercase tracking-wider text-base-content/50">Biggest unknown</div>
         <div class="text-2xl font-bold text-warning">§3 / §4</div>
-        <div class="text-sm text-base-content/70">The pack's implementation hint and deliverable were never photographed.</div>
+        <div class="text-sm text-base-content/70">Still uncaptured. §4 outranks this page and is re-diffed at CP1 02:00.</div>
       </div>
     </div>
   </section>
@@ -85,7 +86,7 @@
   <!-- ============ PILLARS ============ -->
   <section class="flex flex-col gap-4">
     <div>
-      <h2 class="text-2xl font-bold">Five pillars, one thesis</h2>
+      <h2 class="text-2xl font-bold">Six pillars, one thesis</h2>
       <p class="mt-1 text-base-content/70 max-w-3xl">
         Thesis: <em>a context service is not retrieval over a repository — it is an evidence graph with time on
         every edge.</em> Each pillar is a refusal, which is why the design is defensible under questioning.
@@ -105,7 +106,7 @@
         <div class="card-body p-5 gap-2">
           <div class="flex items-center gap-2"><span class="badge badge-primary badge-sm">2</span><h3 class="font-semibold">Time on every assertion</h3></div>
           <p class="text-sm">Four timestamps per claim; a relationship without a validity window is a schema violation, not a shortcut.</p>
-          <p class="rv-mono text-base-content/50">04-temporal-model.md:16-22 · AGENTS.md:41-43</p>
+          <p class="rv-mono text-base-content/50">04-temporal-model.md:16-22 · AGENTS.md:36-38</p>
         </div>
       </article>
       <article class="card bg-base-200 border border-base-content/10">
@@ -153,7 +154,7 @@
 flowchart TB
   C["corpus · 373 files · 8 source types"]:::src
   W["walker + router · content-hash incremental"]:::core
-  P["six pipelines · code · config · api · schema · prose · diagram"]:::pipe
+  P["four pipelines ship · config · api · schema · prose"]:::pipe
   E["ClaimRecord envelope · subject · predicate · object · 4 dates · spans"]:::contract
   G["three gates · schema · span verbatim · ontology"]:::gate
   R["resolver · identity · temporal · conflicts · communities"]:::res
@@ -331,10 +332,10 @@ confidence 0..1 · extractor(+version)</pre>
             <td>Same graph, earlier clock: "yes, Redis" — architecture as it was during the outage.</td>
           </tr>
           <tr>
-            <td>"What breaks if I change this?"</td>
-            <td>impact of change on X</td>
-            <td class="rv-mono">context_impact_of_change</td>
-            <td>Reverse-dependency closure plus the risks attached to the affected set.</td>
+            <td>Two sources disagree about X</td>
+            <td>"which one do I believe?"</td>
+            <td class="rv-mono">context_search<br/>+ CONFLICTS intent</td>
+            <td>Both sides with dates and status, plus the rule that decided the winner — or an honest <span class="rv-mono">DISPUTED</span>.</td>
           </tr>
           <tr>
             <td>Writing a new handler</td>
@@ -386,9 +387,10 @@ sequenceDiagram
     <div>
       <h2 class="text-2xl font-bold">The five-hour constraint, drawn honestly</h2>
       <p class="mt-1 max-w-3xl text-base-content/70">
-        The plan is the scoring-optimal move — 45 of 100 points reward explained reasoning, not built features.
-        But the critical path has no slack: workstream C ends exactly at the freeze, and workstream B's last
-        task ends <em>after</em> it.
+        The plan is the scoring-optimal move — 45 of 100 points reward explained reasoning, not built
+        features. The frozen clock gives three lanes ten minutes of slack, and none of it is free: the pure
+        layers are written before the event. Workstream D is the exception — it ends exactly at the freeze and
+        owns the 15-point integration, so it is the lane to watch.
       </p>
     </div>
     <!-- timeline: bars are % of the 5h budget; CP1 at 40%, freeze at 75% -->
@@ -397,45 +399,44 @@ sequenceDiagram
         <div class="flex flex-wrap items-center gap-3 text-xs text-base-content/60">
           <span class="flex items-center gap-1"><span class="inline-block w-4 h-2 rounded-sm bg-primary"></span> normal</span>
           <span class="flex items-center gap-1"><span class="inline-block w-4 h-2 rounded-sm bg-error"></span> critical path</span>
-          <span class="flex items-center gap-1"><span class="inline-block w-4 h-2 rounded-sm bg-base-content/30"></span> stretch</span>
-          <span class="ml-auto">timeline as written in docs/08 · dashed = CP1 02:00 · solid = freeze 03:45 · docs/10 moves the freeze to 03:30</span>
+          <span class="ml-auto">frozen plan · marker = CP1 02:00 · line = freeze 03:30 · every lane ends by 03:20</span>
         </div>
 
         <div class="flex flex-col gap-1 text-sm">
           <div class="grid gap-2" style="grid-template-columns: 10rem minmax(0,1fr)">
             <span class="text-base-content/60 text-xs pt-1">A · ingest</span><span></span>
-            <span class="text-xs pt-1">walker + router</span><span class="rv-track"><span class="rv-bar" style="left:10%;width:15%"></span></span>
-            <span class="text-xs pt-1">ConfigPipeline</span><span class="rv-track"><span class="rv-bar" style="left:25%;width:20%"></span></span>
-            <span class="text-xs pt-1">SchemaPipeline</span><span class="rv-track"><span class="rv-bar" style="left:45%;width:15%"></span></span>
-            <span class="text-xs pt-1 text-base-content/50">CodePipeline · stretch</span><span class="rv-track"><span class="rv-bar" style="left:60%;width:20%;opacity:.45"></span></span>
+            <span class="text-xs pt-1">walker + router</span><span class="rv-track"><span class="rv-bar" style="left:6.7%;width:13.3%"></span></span>
+            <span class="text-xs pt-1">ConfigPipeline</span><span class="rv-track"><span class="rv-bar" style="left:20%;width:20%"></span></span>
+            <span class="text-xs pt-1">SchemaPipeline</span><span class="rv-track"><span class="rv-bar" style="left:40%;width:15%"></span></span>
+            <span class="text-xs pt-1">gate audit</span><span class="rv-track"><span class="rv-bar" style="left:55%;width:11.7%"></span></span>
 
             <span class="text-base-content/60 text-xs pt-1">B · knowledge</span><span></span>
-            <span class="text-xs pt-1">Neo4j schema + loader</span><span class="rv-track"><span class="rv-bar" style="left:10%;width:20%"></span></span>
-            <span class="text-xs pt-1">Entity resolution</span><span class="rv-track"><span class="rv-bar" style="left:30%;width:15%"></span></span>
-            <span class="text-xs pt-1">Temporal resolver</span><span class="rv-track"><span class="rv-bar bg-error" style="left:45%;width:25%"></span></span>
-            <span class="text-xs pt-1">Conflict detection</span><span class="rv-track"><span class="rv-bar bg-error" style="left:70%;width:10%"></span></span>
+            <span class="text-xs pt-1">Neo4j schema + loader</span><span class="rv-track"><span class="rv-bar" style="left:6.7%;width:20%"></span></span>
+            <span class="text-xs pt-1">Entity resolution</span><span class="rv-track"><span class="rv-bar" style="left:26.7%;width:15%"></span></span>
+            <span class="text-xs pt-1">Temporal resolver 1–6</span><span class="rv-track"><span class="rv-bar bg-error" style="left:41.7%;width:20%"></span></span>
+            <span class="text-xs pt-1">Conflict detection</span><span class="rv-track"><span class="rv-bar" style="left:61.7%;width:5%"></span></span>
 
             <span class="text-base-content/60 text-xs pt-1">C · retrieval</span><span></span>
-            <span class="text-xs pt-1">Embeddings + hybrid</span><span class="rv-track"><span class="rv-bar" style="left:10%;width:20%"></span></span>
-            <span class="text-xs pt-1">CQP validator + compiler</span><span class="rv-track"><span class="rv-bar bg-error" style="left:30%;width:25%"></span></span>
-            <span class="text-xs pt-1">Templates + assembler</span><span class="rv-track"><span class="rv-bar bg-error" style="left:55%;width:20%"></span></span>
+            <span class="text-xs pt-1">Embeddings + hybrid</span><span class="rv-track"><span class="rv-bar" style="left:6.7%;width:20%"></span></span>
+            <span class="text-xs pt-1">Wire prebuilt compiler</span><span class="rv-track"><span class="rv-bar bg-error" style="left:26.7%;width:20%"></span></span>
+            <span class="text-xs pt-1">Templates + assembler</span><span class="rv-track"><span class="rv-bar bg-error" style="left:46.7%;width:20%"></span></span>
 
             <span class="text-base-content/60 text-xs pt-1">D · edge + proof</span><span></span>
-            <span class="text-xs pt-1">Diagram fixtures</span><span class="rv-track"><span class="rv-bar" style="left:10%;width:10%"></span></span>
-            <span class="text-xs pt-1">Narrative header pass</span><span class="rv-track"><span class="rv-bar" style="left:20%;width:15%"></span></span>
-            <span class="text-xs pt-1">FastAPI + MCP</span><span class="rv-track"><span class="rv-bar bg-error" style="left:35%;width:25%"></span></span>
-            <span class="text-xs pt-1">Golden set + demo script</span><span class="rv-track"><span class="rv-bar" style="left:60%;width:15%"></span></span>
+            <span class="text-xs pt-1">Fixtures + answer schema</span><span class="rv-track"><span class="rv-bar" style="left:6.7%;width:13.3%"></span></span>
+            <span class="text-xs pt-1">REST skeleton</span><span class="rv-track"><span class="rv-bar" style="left:20%;width:20%"></span></span>
+            <span class="text-xs pt-1">MCP server</span><span class="rv-track"><span class="rv-bar bg-error" style="left:40%;width:20%"></span></span>
+            <span class="text-xs pt-1">Golden set + script</span><span class="rv-track"><span class="rv-bar bg-error" style="left:60%;width:10%"></span></span>
           </div>
           <div class="grid gap-2 text-[.65rem] text-base-content/40 mt-1" style="grid-template-columns: 10rem minmax(0,1fr)">
-            <span></span><span class="flex justify-between"><span>00:00</span><span>02:00</span><span>03:45</span><span>05:00</span></span>
+            <span></span><span class="flex justify-between"><span>00:00</span><span>02:00</span><span>03:30</span><span>05:00</span></span>
           </div>
         </div>
       </div>
     </div>
     <div class="grid gap-3 md:grid-cols-3">
-      <div class="alert alert-error alert-sm text-sm"><span><strong>C ends 03:45 = freeze.</strong> 195 min of retrieval work with zero buffer, on the demo-critical path.</span></div>
-      <div class="alert alert-error alert-sm text-sm"><span><strong>B ends 04:00 &gt; freeze.</strong> Conflict detection runs 15 min past the hard stop the plan itself declares.</span></div>
-      <div class="alert alert-warning alert-sm text-sm"><span><strong>D ends 04:15 = rehearsal start.</strong> The MCP server — the 15-point integration — is last, unprotected.</span></div>
+      <div class="alert alert-warning alert-sm text-sm"><span><strong>C ends 03:20.</strong> 180 min on the demo-critical path, but the compiler is pre-built so day-of is wiring.</span></div>
+      <div class="alert alert-warning alert-sm text-sm"><span><strong>B ends 03:20.</strong> Conflict detection is the 15-minute task to drop first if the resolver slips.</span></div>
+      <div class="alert alert-warning alert-sm text-sm"><span><strong>D ends 03:30 = rehearsal start.</strong> The MCP server — the 15-point integration — is still last, and still unprotected.</span></div>
     </div>
   </section>
 
@@ -455,7 +456,7 @@ sequenceDiagram
         <div class="card-body p-4 gap-1">
           <div class="text-xs uppercase tracking-wider text-base-content/50">A · extraction</div>
           <h3 class="font-semibold">Walker, router, deterministic pipelines</h3>
-          <p class="text-sm text-base-content/70">Emits a file. Never opens Neo4j. Owns the gate-2 mechanism: line-numbered chunks, derived <span class="rv-mono">end_line</span>.</p>
+          <p class="text-sm text-base-content/70">Emits a file. Never opens Neo4j. Owns the gate-2 mechanism: <span class="rv-mono">excerpt + start_line</span> as a hint, resolved against the file, <span class="rv-mono">end_line</span> derived.</p>
           <p class="rv-mono text-xs text-base-content/50 mt-auto pt-2">ingest/ · done: claims.jsonl passes gates 1–3</p>
         </div>
       </div>
@@ -471,7 +472,7 @@ sequenceDiagram
         <div class="card-body p-4 gap-1">
           <div class="text-xs uppercase tracking-wider text-base-content/50">C · search</div>
           <h3 class="font-semibold">Embeddings, hybrid, CQP, assembler</h3>
-          <p class="text-sm text-base-content/70">Longest chain, so the compiler and seven templates are written <em>before</em> the event. Degrades to hybrid with <span class="rv-mono">degraded: true</span>.</p>
+          <p class="text-sm text-base-content/70">Longest chain, so the compiler and six templates are written <em>before</em> the event. Degrades to hybrid with <span class="rv-mono">degraded: true</span>.</p>
           <p class="rv-mono text-xs text-base-content/50 mt-auto pt-2">retrieval/ · done: tests/cqp green, no model</p>
         </div>
       </div>
@@ -502,12 +503,66 @@ flowchart LR
       <table class="table table-xs">
         <thead><tr><th>Checkpoint</th><th>Gate</th><th>Fails if</th></tr></thead>
         <tbody>
-          <tr><td class="rv-mono">00:20</td><td>contracts frozen · fixtures on disk · Neo4j up</td><td>anyone is still designing an interface</td></tr>
+          <tr><td class="rv-mono">00:20</td><td>contracts loaded from the pre-event build · fixtures on disk · Neo4j up</td><td>anyone is still designing an interface</td></tr>
           <tr><td class="rv-mono">02:00</td><td>one pipeline → graph → <span class="rv-mono">/v1/query</span> answers T1 from real data</td><td>the path is still fixture-only</td></tr>
           <tr><td class="rv-mono">03:30</td><td>feature freeze · golden set run and printed</td><td>someone is mid-refactor</td></tr>
           <tr><td class="rv-mono">03:30–04:15</td><td>rehearsal on the demo machine</td><td>rehearsal starts on a laptop that works</td></tr>
         </tbody>
       </table>
+    </div>
+  </section>
+
+  <!-- ============ SCOPE FREEZE ============ -->
+  <section class="flex flex-col gap-4">
+    <div>
+      <h2 class="text-2xl font-bold">Scope freeze — what got cut</h2>
+      <p class="mt-1 max-w-3xl text-base-content/70">
+        Nothing is built yet, so simplification is free. Every item below leaves a lane
+        with less to write and removes no claim from the demo.
+        <span class="rv-mono">docs/adr/0006-scope-of-the-build.md</span>
+      </p>
+    </div>
+
+    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div class="stat bg-base-200 rounded-box border border-base-content/10 p-4">
+        <div class="stat-title text-xs">pipelines</div>
+        <div class="stat-value text-2xl">4 <span class="text-base text-base-content/40">of 6</span></div>
+        <div class="stat-desc text-xs">config · api · schema · prose-header</div>
+      </div>
+      <div class="stat bg-base-200 rounded-box border border-base-content/10 p-4">
+        <div class="stat-title text-xs">CQP intents</div>
+        <div class="stat-value text-2xl">6 <span class="text-base text-base-content/40">of 7</span></div>
+        <div class="stat-desc text-xs">impact-of-change dropped</div>
+      </div>
+      <div class="stat bg-base-200 rounded-box border border-base-content/10 p-4">
+        <div class="stat-title text-xs">MCP tools</div>
+        <div class="stat-value text-2xl">3 <span class="text-base text-base-content/40">of 6</span></div>
+        <div class="stat-desc text-xs">search · relationship · risks</div>
+      </div>
+      <div class="stat bg-base-200 rounded-box border border-base-content/10 p-4">
+        <div class="stat-title text-xs">model call sites</div>
+        <div class="stat-value text-2xl">2</div>
+        <div class="stat-desc text-xs">modality · planning</div>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto rounded-box border border-base-content/10">
+      <table class="table table-sm">
+        <thead><tr><th class="w-1/3">Cut</th><th>Why it is safe</th></tr></thead>
+        <tbody>
+          <tr><td>L3 topic / community layer (Leiden)</td><td>No demo query needs it; the forward view already claims it as the scaling story.</td></tr>
+          <tr><td>Cross-encoder reranker</td><td>Already cut in 08 but still drawn in 06. Removed from the pipeline; recall target set for hybrid + RRF.</td></tr>
+          <tr><td>CodePipeline (tree-sitter, 5 grammars)</td><td>Largest build. T1 corroboration already arrives from ADR-003 + release 1.3 + the September diagram.</td></tr>
+          <tr><td>DiagramPipeline VLM extraction</td><td>Replaced by six human-committed fixtures — removes a model dependency and its accuracy failure mode.</td></tr>
+          <tr><td>Narrative LLM claim extraction</td><td>Header pass keeps every date and status; the model keeps modality and planning only.</td></tr>
+          <tr><td><span class="rv-mono">IMPACT_OF_CHANGE</span> intent</td><td>The only template needing reverse closure; nothing in the demo asks for it.</td></tr>
+          <tr><td><span class="rv-mono">/v1/gaps</span>, <span class="rv-mono">/v1/conflicts</span>, OTel, injection scanner, <span class="rv-mono">ncs verify</span>, <span class="rv-mono">--since</span></td><td>Column 2 or 3 in 08; none appear in the seven-minute demo script.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="alert alert-success alert-sm text-sm">
+      <span><strong>What survives intact:</strong> the stale-document story (T1), the schema-drift answer (T2), the two negative joins (T4, T5), the proposal-vs-decision case (T6) and the disputed security finding (T7) — all six resolve without CodePipeline or a VLM, because every one of them is decided by prose, paths and migrations.</span>
     </div>
   </section>
 
@@ -519,6 +574,9 @@ flowchart LR
         Each line was checked against the corpus at <span class="rv-mono">612cc0b</span> or against the
         document it cites. Severity is about demo risk, not taste.
       </p>
+      <div class="alert alert-success alert-sm mt-3 text-sm">
+        <span><strong>All five blockers resolved and frozen</strong> in <span class="rv-mono">docs/adr/0006-scope-of-the-build.md</span>. The table below is the audit trail: each row records what was wrong and how it was closed, not a pending task.</span>
+      </div>
     </div>
     <div class="overflow-x-auto rounded-box border border-base-content/10">
       <table class="table table-zebra table-sm">
@@ -527,31 +585,31 @@ flowchart LR
         </thead>
         <tbody>
           <tr>
-            <td><span class="badge badge-error badge-sm">block</span></td>
+            <td><span class="badge badge-success badge-sm">fixed</span></td>
             <td>Pack §3 <em>Implementation Hint</em> and §4 <em>Target Deliverable</em> were never captured, yet the docs are declared frozen for implementation.</td>
             <td class="rv-mono text-xs">00-brief.md:105-114<br>README.md:28</td>
-            <td>Get both sections before the 00:00 contract freeze; diff §4 against the must-ship column.</td>
+            <td>Deliverable fixed as demo + repo + docs; §4 outranks this and is re-diffed at CP1 02:00. <span class="rv-mono">ADR-0006</span></td>
           </tr>
           <tr>
-            <td><span class="badge badge-error badge-sm">block</span></td>
+            <td><span class="badge badge-success badge-sm">fixed</span></td>
             <td>Critical path has zero slack and one task overruns the declared feature freeze.</td>
             <td class="rv-mono text-xs">08:67-96 (gantt), 08:39</td>
             <td>Pre-build the CQP compiler + 7 templates + golden fixtures <em>before</em> the event — they need no corpus, no Neo4j, no model.</td>
           </tr>
           <tr>
-            <td><span class="badge badge-error badge-sm">block</span></td>
+            <td><span class="badge badge-success badge-sm">fixed</span></td>
             <td>Gate 2 is the whole trust story, but the mechanism for getting exact line numbers out of a 7–8B model is unspecified.</td>
             <td class="rv-mono text-xs">05:142-153<br>03:198-201</td>
             <td>Feed line-numbered chunk text; require <span class="rv-mono">excerpt + start_line</span>; derive <span class="rv-mono">end_line</span> from the match offset. Then the gate is exact and the drop rate is measurable.</td>
           </tr>
           <tr>
-            <td><span class="badge badge-error badge-sm">block</span></td>
+            <td><span class="badge badge-success badge-sm">fixed</span></td>
             <td>Month-precision dates have no normalisation rule, and the time-travel demo depends on one.</td>
             <td class="rv-mono text-xs">04:138 (2026-06)<br>08:164 (as_of 2026-03-01)</td>
             <td>Declare the convention (first day of period) and store <span class="rv-mono">date_precision</span>; otherwise <span class="rv-mono">valid_from ≤ t</span> is a coin flip.</td>
           </tr>
           <tr>
-            <td><span class="badge badge-error badge-sm">block</span></td>
+            <td><span class="badge badge-success badge-sm">fixed</span></td>
             <td>Two schema constraints are Enterprise-only in Neo4j 5, but ADR-0001 specifies "Neo4j 5.x" without an edition. On Community, <span class="rv-mono">schema.cypher</span> fails at startup and the loader never runs.</td>
             <td class="rv-mono text-xs">03:180-183<br>(<span class="rv-mono">REQUIRE … IS NOT NULL</span>)<br>ADR-0001 · Neo4j Cypher Manual 5: "property existence constraints — Enterprise Edition"</td>
             <td>Either pin <span class="rv-mono">neo4j:5-enterprise</span> with a licence note, or drop the two existence constraints and enforce non-null in the pydantic model plus a loader assertion. Uniqueness constraints are Community-safe.</td>
@@ -595,7 +653,7 @@ flowchart LR
           <tr>
             <td><span class="badge badge-ghost badge-sm">nit</span></td>
             <td>A behavioural rule ships with an unresolved aside in parentheses.</td>
-            <td class="rv-mono text-xs">AGENTS.md:65-66</td>
+            <td class="rv-mono text-xs">AGENTS.md:60-61</td>
             <td>Resolve or delete the "ponytail" parenthetical; the rule reads as a draft.</td>
           </tr>
         </tbody>

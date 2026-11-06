@@ -1,13 +1,12 @@
 # 10 — Workstreams: four developers, four lanes
 
 Four lanes, one owner each, one contract between them. This supersedes the workstream
-section of [08](08-delivery-plan.md#workstreams) where they disagree — the split is the
-same shape, but the timing reflects the two schedule defects found in review
-([timeline](08-delivery-plan.md#workstreams) ends exactly at the freeze; conflict
-detection ran past it).
+section of [08](08-delivery-plan.md#workstreams) where they disagree. Scope is frozen by
+[ADR-0006](adr/0006-scope-of-the-build.md): four pipelines, six intents, three MCP tools.
 
 Budget: 4 × 5 h = 20 developer-hours, ~14 productive. Freeze at **03:30**, not 03:45.
-The 15 minutes recovered are the only slack in the plan.
+The pure layers (contracts, compiler, resolver functions, fixtures) are built **before**
+the event, so day-of work is wiring — that is what buys the slack, not moving a clock.
 
 ## The four lanes
 
@@ -29,25 +28,26 @@ Anchor lines were re-checked on 2026-11-06.
 
 | Contract | Defined by | State |
 |---|---|---|
-| `contracts/claim.py` — `ClaimRecord` + `Span` | [05:6-32](05-extraction-pipelines.md#one-envelope-six-pipelines) | text complete, plus the two precision fields |
-| `contracts/cqp.schema.json` | [06:39-85](06-retrieval.md#the-cqp-schema) | text complete, needs JSON Schema form |
-| `contracts/answer.schema.json` | [06:122-156](06-retrieval.md#answer-assembly) | **only an example exists** — no schema, no field list; D writes it first |
-| `infra/neo4j/schema.cypher` | [03:157-190](03-ontology.md#storage-indexing-and-validation-in-neo4j) | text complete, minus the Enterprise-only constraints |
+| `contracts/claim.py` — `ClaimRecord` + `Span` | [05:6-40](05-extraction-pipelines.md#one-envelope-six-pipelines--four-ship) | text complete: referential `Span` (no persisted excerpt), `valid_from_precision` / `valid_to_precision` |
+| `contracts/cqp.schema.json` | [06:39-85](06-retrieval.md#the-cqp-schema) | six intents, `IMPACT_OF_CHANGE` removed |
+| `contracts/answer.schema.json` | [06:122-166](06-retrieval.md#answer-assembly) | citations are `{path, lines, hash}`; text resolved by `/v1/span` |
+| `infra/neo4j/schema.cypher` | [03:157-192](03-ontology.md#storage-indexing-and-validation-in-neo4j) | Community-safe: uniqueness only, non-null in code |
 
 Plus one artefact that buys the parallelism: `data/fixtures/claims-sample.jsonl`,
 30 hand-written claims covering T1 and T2. Dev C and Dev D develop against it from
 minute 20; without it they wait two hours for Dev A.
 
-**Two fixes to the contracts found in review:**
+**Three fields the review added to the contracts, all frozen:**
 
-- `ClaimRecord` gains `valid_from_precision: date | month` and `observed_precision`,
-  because `releases/2026-06-v1.3.md` yields `2026-06` and the time-travel demo filters on
-  `valid_from <= t`. Normalise to the **first day of the period**; record that you did.
-- `schema.cypher` uses **uniqueness constraints only**. Property existence
-  (`REQUIRE … IS NOT NULL`) is Enterprise Edition in Neo4j 5; the compose file does not
-  say which edition it pulls. Non-null is enforced in pydantic and the loader instead.
-  If someone insists on Enterprise, it goes in `infra/neo4j/compose.yaml` with a licence
-  note — one decision, written down, not discovered at 02:40.
+- `valid_from_precision` / `valid_to_precision` (`day` | `month`), because
+  `releases/2026-06-v1.3.md` yields `2026-06`. Rule: `valid_from` → first day of the
+  period, `valid_to` → last day ([04](04-temporal-model.md#partial-dates-one-rule-both-edges-safe)).
+- `Span` is **referential**: `path`, `start_line`, `end_line`, `content_hash`. The excerpt
+  is transient verification input and is never persisted; answer citations carry the same
+  four fields and the text is resolved by `/v1/span`.
+- `schema.cypher` uses **uniqueness constraints only** — property existence is Enterprise
+  Edition in Neo4j 5, and we run `neo4j:5-community`. Non-null lives in pydantic and in a
+  loader assertion that raises.
 
 ## Lane detail
 
@@ -58,7 +58,8 @@ never opens Neo4j.
 
 - **00:20–01:00** Walker (`git ls-files` + content hash), router (path → extension →
   magic bytes), `ConfigPipeline` (`package.json`, `compose.yaml`, `config/ports.json`,
-  `pnpm-workspace.yaml`, `turbo.json`, `CODEOWNERS`).
+  `pnpm-workspace.yaml`, `turbo.json`, `CODEOWNERS`). No tree-sitter, no VLM: the
+  `CodePipeline` and `DiagramPipeline` are forward work ([ADR-0006](adr/0006-scope-of-the-build.md)).
 - **01:00–02:00** `SchemaPipeline` (`sqlglot`): migration-ordered validity —
   `002-account-tiers.sql` closes `users.status`, opens `users.account_status`.
 - **02:00–03:00** `NarrativePipeline` **header pass only** — `Date:`, `Status:`,
@@ -98,11 +99,11 @@ loader twice leaves the node count unchanged.
 ### C · Search — `retrieval/`
 
 Owns the only path from a question to the database. Highest risk, longest chain, so
-**the compiler and the seven templates are written before the event** — they need no
+**the compiler and the six templates are written before the event** — they need no
 corpus, no Neo4j and no model, and writing them on the day is what puts the freeze at
 risk.
 
-- **Pre-event** `cqp.schema.json`, the validator, the seven compiler templates, the
+- **Pre-event** `cqp.schema.json`, the validator, the six compiler templates, the
   assembler. Unit tests with hand-written plans as fixtures.
 - **00:20–01:20** Embeddings (`nomic-embed-text`, 768-d) over chunks; hybrid seed —
   vector kNN + BM25 → RRF (k=60). No cross-encoder: it is not in the five-hour build,
@@ -126,8 +127,8 @@ Owns the two transports, the proof, and the demo.
 - **01:00–02:00** `ContextService` service layer; `/v1/query`, `/v1/plan`, `/v1/execute`,
   `/v1/entity/{kind}/{key}`.
 - **02:00–03:00** MCP server, **three** tools: `context_search`,
-  `context_explain_relationship`, `context_risks`. Six are documented, three ship —
-  say that out loud rather than shipping three and describing six.
+  `context_explain_relationship`, `context_risks` (plus the shared `resolve_span`
+  helper). Six were designed; three ship, and that is said out loud.
 - **03:00–03:30** Golden set of seven traps, three assertions each (answer, status,
   citation). Freeze at 03:30 whether or not all seven are green; the run is the report.
 
@@ -159,7 +160,7 @@ C's pre-built compiler means its wait starts at 01:20, not at 00:20.
 
 | Time | Gate | Fails if |
 |---|---|---|
-| 00:20 | Contracts frozen, fixtures on disk, Neo4j up | anyone still designing an interface |
+| 00:20 | Contracts loaded from the pre-event build, fixtures on disk, Neo4j up | anyone still designing an interface |
 | 02:00 | One pipeline → graph → `/v1/query` answers T1 from real data | the path is still fixture-only |
 | 03:30 | Feature freeze; golden set run and printed | someone is mid-refactor |
 | 03:30–04:15 | Rehearsal on the demo machine | rehearsal starts on a laptop |
@@ -170,14 +171,16 @@ branch. Anything unfinished is stashed and described as forward work.
 
 ## Who owns which review finding
 
-| Finding | Owner | Closed by |
-|---|---|---|
-| Pack §3/§4 unknown | team lead, before 00:00 | both sections in hand, diffed against the must-ship column |
-| Zero-slack critical path | C | compiler + templates pre-built |
-| Gate 2 mechanism unspecified | A | line-numbered chunks, derived `end_line` |
-| Month-precision dates | B | `*_precision` fields, first-day convention |
-| Neo4j Enterprise-only constraints | B | uniqueness-only schema or enterprise compose |
-| 6 vs 3 tools | D | three shipped, six documented |
-| Reranker cut but still in docs | C | shipped pipeline stated as vector + BM25 + RRF |
-| Spine vs design indistinguishable | all | one-line `spine: yes/no` marker per section |
-| `06` cites app.py:41-58 | D | corrected to 61-85 in the same commit as the fixture |
+All five blockers are **resolved and frozen** ([ADR-0006](adr/0006-scope-of-the-build.md)).
+
+| Finding | Resolution |
+|---|---|
+| Pack §3/§4 unknown | Deliverable fixed as the seven-trap demo + repo + explained design; §4 outranks this and is re-diffed at CP1 02:00 if it surfaces |
+| Zero-slack critical path | Pure layers built before the event: compiler + six templates + tests (C), answer schema + 30 claims (D), resolver functions + T1 test (B) |
+| Gate 2 mechanism unspecified | Extractors return `excerpt` + `start_line` as a hint; the gate resolves it against the file at its hash, derives `end_line`, drops on absence, counts `span_corrected` |
+| Month-precision dates | `valid_from` → day 1, `valid_to` → last day, precision recorded on the claim |
+| Neo4j Enterprise-only constraints | `neo4j:5-community`, uniqueness only, non-null enforced in pydantic + loader assertion |
+| 6 vs 3 tools | Three ship, three remain CQP intents behind `/v1/query` |
+| Reranker cut but still drawn | Removed from `06`; recall target set for hybrid + RRF |
+| Spine vs design indistinguishable | ADR-0006 is the scope SSOT; `08` scope line rewritten; pipelines marked *forward* in `02`/`05` |
+| `06` cited app.py:41-58 | Corrected to 61-85 in the answer example |

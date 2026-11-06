@@ -33,20 +33,20 @@ the agent is trying to accomplish; keep the tool count small because tool schema
 consume ~40% of an agent's tokens before it does anything; compute server-side and
 return conclusions, not raw rows.
 
-So: **six workflow tools**, one per CQP intent that an agent actually needs. Not
-`get_node`, `list_edges`, `run_cypher`.
+So: **three workflow tools**, one per CQP intent the demo actually exercises. Not
+`get_node`, `list_edges`, `run_cypher`. Six were designed; three ship —
+[ADR-0006](adr/0006-scope-of-the-build.md).
 
 | Tool | For the agent's question | Returns |
 |---|---|---|
 | `context_search` | "what do we know about X?" | ranked claims + citations + status |
 | `context_explain_relationship` | "how do A and B connect?" | paths, each hop with evidence and dates |
-| `context_impact_of_change` | "what breaks if I change A?" | reverse-dependency closure + affected risks |
-| `context_conflicts` | "what disagrees about X?" | contradiction pairs, both sides, recommendation |
-| `context_timeline` | "how did X change over time?" | claims ordered by `valid_from` with supersession |
 | `context_risks` | "what's unsafe here?" | risks + CWE + corroboration status + the safe pattern |
 
-Shared parameters across all six: `as_of`, `status_in`, `token_budget`,
-`max_hops`. An agent that learns one tool has learned all six.
+Shared parameters across all three: `as_of`, `status_in`, `token_budget`, `max_hops`.
+An agent that learns one tool has learned all three. `context_conflicts`,
+`context_timeline` and `context_impact_of_change` exist as CQP intents behind
+`POST /v1/query` and are promoted to tools only when an agent needs them.
 
 `context_risks` is the one that closes the loop on the brief's fourth scenario
 (*"ensure that generated code does not repeat the same security risks"*). It does not
@@ -69,8 +69,9 @@ POST /v1/plan               { question }                                     →
 POST /v1/execute            { cqp }                                          → answer envelope
 GET  /v1/entity/{kind}/{key}?as_of=                                          → entity + claims
 GET  /v1/entity/{kind}/{key}/timeline                                        → status history
-GET  /v1/conflicts?scope=                                                    → open contradictions
-GET  /v1/gaps?kind=                                                          → undocumented / unimplemented
+GET  /v1/conflicts?scope=   (column 2)                                       → open contradictions
+GET  /v1/span?path=&start=&end=                                              → verified bytes for a citation
+GET  /v1/gaps?kind=         (column 2)                                       → undocumented / unimplemented
 GET  /v1/sources/{path}                                                      → claims extracted from one file
 GET  /healthz  /readyz  /v1/index/status                                     → ops
 ```

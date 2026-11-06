@@ -43,14 +43,14 @@ flowchart TB
 
     SRC --> WALK["Walker + content router<br/><i>content-hash addressed, incremental</i>"]
 
-    subgraph ETL["Agentic ETL — six pipelines, one output envelope"]
+    subgraph ETL["ETL — six pipelines documented, four ship"]
         direction LR
-        P1[CodePipeline]
         P2[ConfigPipeline]
         P3[ApiSpecPipeline]
         P4[SchemaPipeline]
-        P5[NarrativePipeline]
-        P6[DiagramPipeline]
+        P5["NarrativePipeline<br/>header pass"]
+        P1["CodePipeline · forward"]:::fwd
+        P6["DiagramPipeline · forward"]:::fwd
     end
 
     WALK --> ETL
@@ -64,7 +64,7 @@ flowchart TB
         R1["Entity resolution<br/><i>declared identifiers only</i>"]
         R2["Temporal resolver<br/><i>valid · deprecated · planned</i>"]
         R3["Conflict detector<br/><i>disputed, both sides kept</i>"]
-        R4["Community layer<br/><i>noun-phrase co-occurrence + Leiden</i>"]
+        R4["Community layer · forward<br/><i>not built</i>"]
         R1 --> R2 --> R3 --> R4
     end
 
@@ -85,10 +85,12 @@ flowchart TB
     subgraph EDGE["Edge"]
         direction LR
         E1["REST / FastAPI"]
-        E2["MCP server<br/>6 workflow tools"]
+        E2["MCP server<br/>3 workflow tools"]
     end
 
     EDGE --> USERS["engineers · IDE agents · chat"]
+
+    classDef fwd stroke-dasharray:4 3
 ```
 
 ## The four layers of the index
@@ -119,7 +121,7 @@ flowchart TB
 | **L0 Evidence** | `Source`, `Span`, `Chunk`; vector + full-text indexes | Walker + chunker + embedder | "where exactly does it say that?" |
 | **L1 Claim** | `Claim` nodes with `valid_from/valid_to/observed_at/recorded_at`, `status`, `confidence`, `CONTRADICTS` edges | Six pipelines → validator | "is this still true, and who disagrees?" |
 | **L2 Entity** | `Service`, `Datastore`, `Endpoint`, `Table`, `Risk`, `Team`… and **materialised** `CALLS`, `READS_FROM`, `OWNS`, `DEPENDS_ON` carrying the same temporal fields | Resolver promotion | "what breaks if I change this?" |
-| **L3 Topic** | `Topic` communities over L2, with member lists and a label | Noun-phrase co-occurrence + Leiden, **no LLM** | "what is the stock area, and what's in it?" |
+| **L3 Topic** | `Topic` communities over L2, with member lists and a label | Noun-phrase co-occurrence + Leiden, **no LLM** — *not built* ([ADR-0006](adr/0006-scope-of-the-build.md)) | "what is the stock area, and what's in it?" |
 
 **Why L1 exists at all.** Without reified claims you cannot represent
 `docs/adr/004-people-sso.md` (T6) — a *proposal* that explicitly forbids being read as
@@ -134,15 +136,16 @@ and impact analysis is the query shape most users want. The resolver *materialis
 only claims that survive validation into direct relationships, each keeping a
 `DERIVED_FROM` pointer back to its claims. Fast path and audit path, same graph.
 
-**Why L3 exists and why it has no LLM in it.** Microsoft's LazyGraphRAG result is the
+**Why L3 exists and why it has no LLM in it — and why it is not in the build.** Microsoft's LazyGraphRAG result is the
 relevant evidence: deferring all LLM use to query time gives indexing cost identical
 to plain vector RAG — 0.1% of full GraphRAG — while matching or beating GraphRAG
 global search at ~4% of its query cost
-([source](research/sources.md#lazygraphrag)). We build the community structure with
-noun-phrase co-occurrence and graph statistics, and spend LLM tokens only on the
-communities a query actually touches. With a 5-hour budget and local models, a
-pre-summarising index layer is simply unaffordable, and the research says we would be
-paying for summaries nobody reads.
+([source](research/sources.md#lazygraphrag)). The design builds the community structure
+with noun-phrase co-occurrence and graph statistics, and spends LLM tokens only on the
+communities a query actually touches. **It is not in the five-hour build**
+([ADR-0006](adr/0006-scope-of-the-build.md)): with local models a pre-summarising index
+layer is unaffordable, and the research says we would be paying for summaries nobody
+reads. It is the first thing built after the demo.
 
 ## Data flow for one question
 
@@ -159,7 +162,7 @@ sequenceDiagram
     participant A as Assembler
 
     U->>M: context.search("does stock use a redis cache?")
-    M->>P: question + ontology digest
+    M->>P: user question only — never retrieved text
     P-->>M: CQP {intent: STATE_OF, anchors:["inventory-service"],<br/>predicates:["READS_FROM","DEPENDS_ON"],<br/>time:{as_of:"now", status_in:[VALID,DEPRECATED]}}
     M->>C: validate CQP against JSON Schema
     C-->>M: ✓ valid → template T-STATE-OF

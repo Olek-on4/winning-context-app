@@ -3,7 +3,7 @@
 The 15-point area: *"how the solution ingests and extracts knowledge… including how
 the extraction is automated and the ability to handle different formats."*
 
-## One envelope, six pipelines
+## One envelope, six pipelines — four ship
 
 Every pipeline emits the same record. That single constraint is what makes four
 developers able to work in parallel without meetings, and what makes a seventh source
@@ -13,8 +13,9 @@ type a pure addition.
 class Span(BaseModel):
     path: str                 # relative to the submodule root, verified to exist
     start_line: int
-    end_line: int
-    excerpt: str              # must appear verbatim at those lines — gate 2
+    end_line: int             # derived by the gate from the excerpt, never from the model
+    excerpt: str              # transient verification input — never persisted
+    content_hash: str         # file hash the excerpt was checked against
 
 class ClaimRecord(BaseModel):
     subject: EntityRef        # {kind, key}  e.g. {"kind":"Service","key":"inventory-service"}
@@ -23,26 +24,34 @@ class ClaimRecord(BaseModel):
     polarity: Literal["ASSERTS", "NEGATES"]
     modality: Modality        # FACT | DECISION | PROPOSAL | PLAN | HYPOTHESIS | PROHIBITION
     valid_from: date | None
+    valid_from_precision: Literal["day", "month"] = "day"
     valid_to: date | None
+    valid_to_precision: Literal["day", "month"] | None = None
     observed_at: date | None
     evidence: list[Span]      # ≥ 1, always
     confidence: float         # 0..1, the extractor's own
-    extractor: str            # "code.treesitter.ts"
+    extractor: str            # "narrative.header"
     extractor_version: str    # bump invalidates the cache for that pipeline only
 ```
+
+**Storage is referential.** `excerpt` exists only long enough for gate 2 to verify it
+and is then dropped; the graph stores the pointer plus the file hash. `Chunk.text`
+exists because embeddings need bytes, and it is rebuildable, never cited.
 
 ```mermaid
 flowchart LR
     W["Walker<br/>git ls-files + content hash"] --> R{"Router<br/>path + extension<br/>+ magic bytes"}
-    R -->|"*.ts *.tsx *.py *.java *.js"| P1[CodePipeline]
     R -->|"package.json compose.yaml<br/>Dockerfile *.txt turbo.json"| P2[ConfigPipeline]
     R -->|"api-specs/** *.graphql"| P3[ApiSpecPipeline]
     R -->|"migrations/*.sql *.sql"| P4[SchemaPipeline]
-    R -->|"docs/ wiki/ meeting-notes/<br/>issues/ incidents/ releases/"| P5[NarrativePipeline]
-    R -->|"diagrams/*.png"| P6[DiagramPipeline]
-    P1 & P2 & P3 & P4 & P5 & P6 --> E[["ClaimRecord stream"]]
-    E --> G1["gate 1: schema"] --> G2["gate 2: span verbatim"] --> G3["gate 3: ontology"] --> N[(Neo4j)]
+    R -->|"docs/ wiki/ meeting-notes/<br/>issues/ incidents/ releases/"| P5["NarrativePipeline<br/>header pass only"]
+    R -.->|"*.ts *.py *.java · cut"| P1[CodePipeline]
+    R -.->|"diagrams/*.png · cut"| P6[DiagramPipeline]
+    P2 & P3 & P4 & P5 --> E[["ClaimRecord stream"]]
+    E --> G1["gate 1: schema"] --> G2["gate 2: span resolved"] --> G3["gate 3: ontology"] --> N[(Neo4j)]
 ```
+
+Solid edges ship; dashed pipelines are documented forward work ([ADR-0006](adr/0006-scope-of-the-build.md)).
 
 Routing is by path convention first, extension second, magic bytes last. Path first
 because in this corpus the path *is* semantics: `api-specs/history/` and `archive/`
@@ -63,7 +72,7 @@ It also makes the pipeline **idempotent**: claim IDs are derived from
 `MERGE`, never duplicates. Re-running the whole ETL is always safe, which is the
 property that lets four developers run it constantly during a five-hour build.
 
-## The six pipelines
+## The pipelines — four ship, two are forward work
 
 ### CodePipeline — `apps/**`, `packages/**`
 
@@ -193,7 +202,7 @@ ncs resolve                # entity resolution → temporal → conflicts → co
 ncs verify                 # re-check every span against disk; report drift
 ```
 
-`ncs verify` is the maintenance story for [Forward View](09-evaluation.md#forward-view):
+`ncs verify` is **not built** ([ADR-0006](adr/0006-scope-of-the-build.md)) but remains the maintenance story for [Forward View](09-evaluation.md#forward-view):
 because every claim is pinned to `(path, lines, content_hash)`, a nightly job can
 prove the index still matches the repository and flag exactly which claims a merge
 invalidated. The service can detect its own staleness — which, for a system whose

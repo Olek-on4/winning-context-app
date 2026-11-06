@@ -109,6 +109,8 @@ Two sections of the pack were not captured and are therefore not designed agains
 - **§3 Implementation Hint** — may constrain stack or approach.
 - **§4 Target Deliverable for the PoC** — defines what must literally be handed in.
 
-**Action before implementation starts:** obtain both sections and diff them against
-[08 — delivery plan](08-delivery-plan.md). If §4 names a required artefact we are not
-producing, it outranks our plan.
+**Resolution (2026-11-06):** the build proceeds against a fixed deliverable — the
+seven-trap demo, this repository, and the explained design — frozen in
+[ADR-0006](adr/0006-scope-of-the-build.md). §3 and §4 are still worth obtaining: §4
+outranks the frozen scope, and if it surfaces before checkpoint 1 (02:00) the
+must-ship column is re-diffed against it. After CP1 the scope stands.

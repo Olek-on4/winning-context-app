@@ -52,8 +52,8 @@ Every node carries `id` (stable, content-derived), `created_at`, `updated_at`.
 | Label | Key properties | Notes |
 |---|---|---|
 | `Source` | `path`, `content_hash`, `source_type`, `git_last_modified`, `authority` | One per file. `path` is relative to the submodule root — never absolute. |
-| `Span` | `start_line`, `end_line`, `byte_start`, `byte_end`, `excerpt` | The citation unit. Every claim points at ≥1. |
-| `Chunk` | `text`, `embedding`, `token_count`, `heading_path` | Retrieval unit. Vector + full-text indexed. |
+| `Span` | `start_line`, `end_line`, `byte_start`, `byte_end` | The citation unit: a pointer, never stored prose. The text is resolved from `(path, lines, content_hash)` at read time. Every claim points at ≥1. |
+| `Chunk` | `text`, `embedding`, `token_count`, `heading_path` | Retrieval unit; derived from a `Span`, rebuildable, never cited. Vector + full-text indexed. |
 
 ### Claim plane (L1)
 
@@ -175,12 +175,10 @@ CREATE FULLTEXT INDEX chunk_text IF NOT EXISTS
   FOR (c:Chunk) ON EACH [c.text];          // Lucene BM25 — exact symbols, SKUs, env vars
 
 // --- L1: claims must be grounded and time-stamped ---------------------------
+// Non-null is enforced in ClaimRecord validation and by a loader assertion:
+// property existence constraints are Enterprise-only, and we run Community.
 CREATE CONSTRAINT claim_id IF NOT EXISTS
   FOR (cl:Claim) REQUIRE cl.id IS UNIQUE;
-CREATE CONSTRAINT claim_grounded IF NOT EXISTS
-  FOR (cl:Claim) REQUIRE cl.observed_at IS NOT NULL;
-CREATE CONSTRAINT claim_status IF NOT EXISTS
-  FOR (cl:Claim) REQUIRE cl.status IS NOT NULL;
 
 // --- L2: entities ------------------------------------------------------------
 CREATE CONSTRAINT service_key IF NOT EXISTS
@@ -195,10 +193,14 @@ CREATE INDEX rel_validity IF NOT EXISTS
    model is handed to Ollama as a JSON Schema `format` constraint, so a local model
    is structurally constrained at generation time rather than corrected afterwards
    ([sources](research/sources.md#ontology-guided-extraction)).
-2. **Span gate** — `span.excerpt` must occur verbatim at `span.start_line..end_line`
-   in the file at `source.content_hash`. **A claim whose quoted evidence is not
-   literally in the file is dropped, not repaired.** This is the single most
-   effective anti-hallucination measure available to us and it costs nothing.
+2. **Span gate** — the extractor returns an `excerpt` and a `start_line` as a *hint*.
+   The gate resolves the pointer against the real file at `source.content_hash`:
+   the excerpt must occur verbatim inside the cited line range; `end_line` is derived
+   from the excerpt's newlines, not trusted from the extractor. Found at the hinted
+   line → accepted. Found elsewhere in the file → accepted with the corrected line and
+   a `span_corrected` counter. **Not found → dropped, never repaired.** The excerpt is
+   then discarded: only the pointer is persisted (see `Span` above). This is the single
+   most effective anti-hallucination measure available and it costs nothing.
 3. **Ontology gate** — `predicate` must exist in the taxonomy above, and the
    subject/object labels must satisfy the predicate's declared domain and range
    (`READS_FROM : Service → Datastore`, not `Service → Person`). Violations are

@@ -41,7 +41,7 @@ a system whose whole pitch is trustworthiness.
 ```jsonc
 {
   "cqp_version": "1.0",
-  "intent": "IMPACT_OF_CHANGE",        // closed enum, 7 values
+  "intent": "STATE_OF",                 // closed enum, 6 values
   "anchors": [                          // what to find first
     {"kind": "Service", "key": "inventory-service", "match": "exact"},
     {"kind": "ANY", "text": "stock cache", "match": "hybrid"}
@@ -66,19 +66,18 @@ a system whose whole pitch is trustworthiness.
 }
 ```
 
-Seven intents, each mapping to exactly one compiler template:
+Six intents, each mapping to exactly one compiler template:
 
 | Intent | Question shape | Template |
 |---|---|---|
 | `LOOKUP` | "what is X" | anchor + 1-hop + claims |
 | `STATE_OF` | "does X still use Y" | anchor + predicate filter + full status history |
 | `RELATIONSHIP` | "how do X and Y connect" | bidirectional shortest paths ≤3, all evidence |
-| `IMPACT_OF_CHANGE` | "what breaks if I change X" | reverse-dependency closure + risks |
 | `CONFLICTS` | "what disagrees about X" | `CONTRADICTS` subgraph, both sides |
 | `TIMELINE` | "how did X change" | all claims about X ordered by `valid_from` |
 | `RISKS` | "what's unsafe in X" | `Risk` subgraph + corroboration status |
 
-The planner's entire job is: pick one of seven intents, extract anchors, set a time
+The planner's entire job is: pick one of six intents, extract anchors, set a time
 filter. That is a *classification and slot-filling* task, which is what small local
 models are actually good at — as opposed to generating a correct graph query against
 a schema they half-remember.
@@ -97,9 +96,8 @@ flowchart TB
     AN --> H1["vector kNN<br/>Neo4j HNSW"]
     AN --> H2["BM25<br/>Neo4j full-text"]
     H1 & H2 --> RRF["Reciprocal Rank Fusion<br/>k=60"]
-    RRF --> RR["rerank<br/>cross-encoder, top-50 → top-10"]
-    RR --> TR["compile → parameterised Cypher<br/>traverse + time filter"]
-    FB --> RR
+    RRF --> TR["compile → parameterised Cypher<br/>traverse + time filter"]
+    FB --> TR
     TR --> AS["assemble"]
     AS --> OUT["claims · citations · conflicts · confidence"]
 ```
@@ -107,17 +105,19 @@ flowchart TB
 **Hybrid, not vector-only, and not negotiable here.** BM25 is what finds `REDIS_URL`,
 `cus-001`, `account_status`, `5005` and `PaymentService` — exact tokens that dense
 embeddings blur. Hybrid with RRF is the documented minimum viable baseline, worth
-15–30% recall over single-method retrieval, and cross-encoder reranking on top of RRF
-dominates everything else measured ([sources](research/sources.md#hybrid-retrieval)).
-In a corpus whose distinguishing features are identifiers, this is the difference
-between working and not.
+15–30% recall over single-method retrieval ([sources](research/sources.md#hybrid-retrieval)).
+Cross-encoder reranking on top of RRF measures better and is **not built**: it is
+forward work ([ADR-0006](adr/0006-scope-of-the-build.md)), so the recall target is set
+for the pipeline that actually ships. In a corpus whose distinguishing features are
+identifiers, hybrid versus vector-only is the difference between working and not.
 
 RRF needs no score normalisation, which is why it is the right fusion for mixing a
 Lucene score with a cosine distance: `score(d) = Σ 1/(60 + rank_i(d))`.
 
-**Reranking.** A cross-encoder over the top ~50 fused candidates. If the local
-reranker proves too slow inside the 5-hour build, the degradation is graceful: RRF
-order is already decent, and we record the omission rather than pretending.
+**Reranking — not built.** A cross-encoder over the top ~50 fused candidates measures
+better, but it is cut by [ADR-0006](adr/0006-scope-of-the-build.md). RRF order is what
+ships, and the recall target in [09](09-evaluation.md#component-level-checks) is set
+accordingly. Recorded as forward work, not as a silent omission.
 
 ## Answer assembly
 
@@ -133,11 +133,9 @@ with footnotes bolted on:
       "status": "VALID", "valid_from": "2026-06-04", "valid_to": null,
       "confidence": 0.96,
       "citations": [
-        {"path": "docs/adr/003-stock-cache.md", "lines": [6,6],
-         "excerpt": "Remove Redis from the local inventory path."},
-        {"path": "releases/2026-06-v1.3.md", "lines": [5,5],
-         "excerpt": "Removed the Redis path and REDIS_URL..."},
-        {"path": "apps/inventory-service/app.py", "lines": [41,58]}
+        {"path": "docs/adr/003-stock-cache.md", "lines": [6,6], "hash": "9e1c…"},
+        {"path": "releases/2026-06-v1.3.md", "lines": [5,5], "hash": "41ab…"},
+        {"path": "apps/inventory-service/app.py", "lines": [61,85], "hash": "c07d…"}
       ],
       "corroborated_by": 3
     },
@@ -160,9 +158,12 @@ Three deliberate properties:
 1. **The deprecated claim is returned, not hidden.** An engineer who just read the
    wiki needs to know why it disagrees. Suppression would produce a service that
    seems to contradict the documentation for no stated reason.
-2. **`citations` is structural** — path plus line range plus the verbatim excerpt that
-   passed gate 2. Never a title, never a paraphrase. This is the AGENTS.md invariant
-   and the rubric's "evidence-backed" in literal form.
+2. **`citations` are referential** — path, line range, and the file hash the range was
+   verified against. Never a title, never a paraphrase, and never stored prose: the
+   caller resolves the text with `GET /v1/span?path=&start=&end=` (or the
+   `resolve_span` MCP helper), which re-checks the hash before returning bytes. This is
+   the AGENTS.md invariant and the rubric's "evidence-backed" in literal form, and it
+   keeps the graph free of duplicated text.
 3. **`gaps` and `degraded` are first-class.** Reporting what is *missing* and
    reporting when the service is operating below spec are both part of the brief, and
    both are easy to quietly omit.

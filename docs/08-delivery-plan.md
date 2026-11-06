@@ -27,39 +27,46 @@ Everything below exists to make that true, honestly, from real extraction.
 
 ## Scope line
 
+Frozen by [ADR-0006](adr/0006-scope-of-the-build.md). Column 1 is the build; column 2 is
+the same lanes working faster, not extra scope; column 3 is a slide.
+
 | Must ship (the spine) | Should ship (if ahead) | Will not ship (documented, not built) |
 |---|---|---|
-| Neo4j + schema + indexes | CodePipeline (tree-sitter) | L3 community layer |
-| ConfigPipeline, SchemaPipeline | NarrativePipeline LLM claim extraction | Cross-encoder reranker |
-| Narrative **header** pass (dates/status, no LLM) | `IMPACT_OF_CHANGE`, `RISKS` intents | Live VLM diagram extraction (fixtures instead) |
-| Claim loader + gates 1–3 | Security sub-extractor | `/v1/gaps`, corroboration scoring |
-| Temporal resolver steps 1–5 | `context_impact_of_change`, `context_risks` | Incremental `--since`, `ncs verify` |
-| Hybrid search (vector + BM25 + RRF) | | Auth, multi-tenant |
-| CQP: `STATE_OF`, `CONFLICTS`, `TIMELINE` | | |
-| MCP: 3 tools · REST `/v1/query`, `/v1/plan` | | |
+| Neo4j Community + uniqueness constraints | `/v1/gaps`, `/v1/conflicts` | L3 community layer |
+| Config, Schema, ApiSpec pipelines | Security sub-extractor (`context_risks` corroboration) | Cross-encoder reranker |
+| Narrative **header** pass (dates/status, no LLM) | Narrative LLM claim extraction | CodePipeline (tree-sitter) |
+| Claim loader + gates 1–3 | `LOOKUP` + `TIMELINE` intents | DiagramPipeline VLM (fixtures instead) |
+| Entity + temporal resolver steps 1–6, conflicts | OTel tracing | `IMPACT_OF_CHANGE` intent and tool |
+| Hybrid search (vector + BM25 + RRF) | | Injection scanner, `ncs verify`, `--since` |
+| CQP: `STATE_OF`, `RELATIONSHIP`, `CONFLICTS`, `RISKS` | | Auth, multi-tenant |
+| MCP: 3 tools · REST `/v1/query`, `/v1/plan`, `/v1/span` | | |
 | Golden set of 7 traps, green | | |
 
 Anything in column 3 that a developer "just quickly adds" is a bug in this plan, not
 a bonus. Say so out loud at the checkpoint.
 
-## Contracts frozen in the first 30 minutes
+## Contracts are loaded, not designed
 
-All four developers, one room, one commit. Nothing else starts until this lands.
+They are written **before** the event — no corpus, no Neo4j and no model is needed for
+any of them ([10](10-workstreams.md#the-four-contracts-frozen-before-the-event)). The first
+30 minutes are for loading them into four checkouts and proving they agree:
 
-1. `ClaimRecord` pydantic model ([05](05-extraction-pipelines.md#one-envelope-six-pipelines)) — **frozen**.
-2. `cqp.schema.json` ([06](06-retrieval.md#the-cqp-schema)) — **frozen**.
-3. `schema.cypher` — constraints and indexes ([03](03-ontology.md#storage-indexing-and-validation-in-neo4j)).
-4. `docker compose up neo4j` green on all four laptops.
+1. `ClaimRecord` pydantic model ([05](05-extraction-pipelines.md#one-envelope-six-pipelines--four-ship)) — **frozen**.
+2. `cqp.schema.json` ([06](06-retrieval.md#the-cqp-schema)) — **frozen**, six intents.
+3. `answer.schema.json` ([06](06-retrieval.md#answer-assembly)) — **frozen**, referential citations.
+4. `schema.cypher` — uniqueness constraints only, Community-safe ([03](03-ontology.md#storage-indexing-and-validation-in-neo4j)).
 5. `data/fixtures/claims-sample.jsonl` — 30 hand-written ClaimRecords covering traps
    T1 and T2.
 
-Item 5 is the one that actually buys the parallelism. With sample claims on disk, Dev
-B, C and D never wait for Dev A's extractors; they develop against fixtures from
-minute 30. This is contract-first development applied to a data pipeline
-([sources](research/sources.md#contract-first)) and it is the only reason four
+`docker compose up -d neo4j` must be green on all four laptops by 00:20; a laptop that
+cannot start the store is found then, not at 02:40.
+
+Item 5 is what actually buys the parallelism: with sample claims on disk, B, C and D
+never wait for A's extractors. This is contract-first development applied to a data
+pipeline ([sources](research/sources.md#contract-first)) and it is the only reason four
 people on one five-hour system is not worse than two.
 
-**Contract changes after minute 30 require all four to agree, in person.** A silent
+**A contract change after 00:20 requires all four to agree, in person.** A silent
 envelope change is the failure mode that ends this.
 
 ## Workstreams
@@ -68,37 +75,38 @@ envelope change is the failure mode that ends this.
 gantt
     dateFormat HH:mm
     axisFormat %H:%M
-    title Five hours
+    title Five hours, freeze at 03:30
     section All
-    Contracts frozen            :done, c, 00:00, 30m
+    Contracts loaded            :done, c, 00:00, 20m
     Checkpoint 1 (integrate)    :milestone, m1, 02:00, 0m
-    Checkpoint 2 (feature freeze):milestone, m2, 03:45, 0m
-    Demo rehearsal              :crit, 04:15, 45m
+    Checkpoint 2 (feature freeze):milestone, m2, 03:30, 0m
+    Demo rehearsal              :crit, dr, 03:30, 45m
     section A · Ingest
-    Walker + router             :a1, 00:30, 45m
+    Walker + router             :a1, 00:20, 40m
     ConfigPipeline              :a2, after a1, 60m
     SchemaPipeline              :a3, after a2, 45m
-    CodePipeline (stretch)      :a4, after a3, 60m
+    Gate audit + integration    :a4, after a3, 35m
     section B · Knowledge
-    Neo4j schema + loader       :b1, 00:30, 60m
+    Neo4j schema + loader       :b1, 00:20, 60m
     Entity resolution           :b2, after b1, 45m
-    Temporal resolver           :crit, b3, after b2, 75m
-    Conflict detection          :b4, after b3, 30m
+    Temporal resolver 1–6       :crit, b3, after b2, 60m
+    Conflict detection          :b4, after b3, 15m
     section C · Retrieval
-    Embeddings + hybrid search  :c1, 00:30, 60m
-    CQP validator + compiler    :crit, c2, after c1, 75m
+    Embeddings + hybrid search  :c1, 00:20, 60m
+    Wire prebuilt compiler      :crit, c2, after c1, 60m
     Templates + assembler       :c3, after c2, 60m
     section D · Edge + proof
-    Diagram fixtures (by hand)  :d1, 00:30, 30m
-    Narrative header pass       :d2, after d1, 45m
-    FastAPI + MCP server        :crit, d3, after d2, 75m
-    Golden set + demo script    :d4, after d3, 45m
+    Fixtures + answer schema    :d1, 00:20, 40m
+    REST skeleton               :d2, after d1, 60m
+    FastAPI + MCP server        :crit, d3, after d2, 60m
+    Golden set + demo script    :d4, after d3, 30m
 ```
 
 ### Dev A — Ingest and extraction
 **Owns** `apps/context-service/ingest/`.
 Walker (`git ls-files` + content hash), content router, `ConfigPipeline`,
-`SchemaPipeline`, then `CodePipeline` if time allows.
+`SchemaPipeline`, then the gate audit that proves every record passes 1–3. No tree-sitter, no VLM —
+[ADR-0006](adr/0006-scope-of-the-build.md).
 **Done when** `ncs ingest` writes a `claims.jsonl` whose every record passes gates 1–3,
 including the `users.status → account_status` rename (trap T2) from the real migration.
 **Depends on** nothing after minute 30. Hands off a file.

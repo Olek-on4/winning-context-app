@@ -27,7 +27,7 @@ We are also running a local 7–8B model, which is the weakest realistic generat
 Option 1's mitigation stack is evidence against the approach: every layer exists to
 contain an output space that did not need to be unbounded. Option 2 is safe but
 cannot express anchors, hop budgets, or time filters without a combinatorial explosion
-of templates. The CQP keeps the template library small (seven intents) while letting
+of templates. The CQP keeps the template library small (six intents after [ADR-0006](0006-scope-of-the-build.md)) while letting
 the model supply the variable parts — which reduces its job to classification and
 slot-filling, the thing small models are actually good at.
 

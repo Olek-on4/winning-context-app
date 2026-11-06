@@ -29,7 +29,9 @@ Supporting material:
 
 ## Status
 
-Version 0.1 — design frozen for implementation, 2026-11-06. Not yet implemented.
+Version 1.0 — **frozen for implementation**, 2026-11-06. Scope and the five blockers
+from the review are settled in [ADR-0006](adr/0006-scope-of-the-build.md); nothing else
+may be added without a new ADR. Not yet implemented.
 Every document below is a *claim about what we will build*. When implementation
 disagrees with a document, the document is wrong: fix it in the same commit.
 Open findings from [plan-review.html](plan-review.html) are tracked in

@@ -98,6 +98,23 @@ sentence ("is this asserting, proposing, planning, or prohibiting?") is genuinel
 linguistic. It is a constrained six-way classification with the JSON Schema enforced
 at generation, which is well within a local model's competence.
 
+## Partial dates: one rule, both edges safe
+
+Most temporal signal in this corpus is month- or path-precision, not day-precision
+(`releases/2026-06-v1.3.md`, `diagrams/architecture-january.png`). Collapse it once, at
+extraction, and record that you did:
+
+| Edge | Month `2026-06` becomes | Why |
+|---|---|---|
+| `valid_from` | `2026-06-01` (first day) | the fact cannot be true *before* the period, so the earliest defensible day |
+| `valid_to` | `2026-06-30` (last day) | a supersession in June must not appear to take effect on June 1 |
+
+Both fields carry `valid_from_precision` / `valid_to_precision` (`day` | `month`), so the
+expansion is reversible and auditable, and a query can widen to "any day in June" when it
+needs to be conservative. Without this rule the March time-travel query in
+[08](08-delivery-plan.md#demo-script) passes or fails depending on which day you pick, and
+every supersession in the corpus is silently biased by up to a month.
+
 ## Resolution algorithm
 
 Runs after extraction, before materialisation. Deterministic; no model in the loop.

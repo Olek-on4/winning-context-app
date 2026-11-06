@@ -10,7 +10,9 @@ point at a corpus file and line. The corpus is seeded with stale documents and f
 joins on purpose; a confident answer from the most topically relevant chunk is
 usually the wrong answer. See `docs/01-corpus-survey.md`.
 
-Design is frozen in `docs/`. Read `docs/README.md` before proposing architecture.
+Design is frozen in `docs/` (v1.0). Scope is frozen by `docs/adr/0006-scope-of-the-build.md`
+— four pipelines, six CQP intents, three MCP tools. Adding anything back is a new ADR,
+not a commit. Read `docs/README.md` before proposing architecture.
 
 ## Hard invariants
 
@@ -83,6 +85,27 @@ properly returns a correct, smaller answer with `degraded: true` — never a gue
 **Make the wrong thing hard.** Read-only DB credentials on the query path.
 Parameterised templates. Closed enums. Constraints in the schema. A rule a reviewer
 has to remember is a rule that will be broken.
+
+## Ponytail — the size rule
+
+Binding for humans and agents. Fast beats big, and small beats clever.
+
+- **Take the first rung that works:** does it need to exist → already in the repo → stdlib
+  → installed dependency → one obvious line → minimum code. Adding a dependency needs
+  agreement; the ladder is not optional.
+- **Lazy about the solution, never about the change.** Finish the callers, tests and
+  fixtures the change breaks. Delete weight instead of commenting it out.
+- **No abstraction for a second implementer who does not exist.** One function is a
+  function; three earn a protocol. No plugin registries, no config languages, no layers.
+- **Shortest working diff** once the scope is known. A one-liner nobody can read is not
+  short — clarity is part of size.
+- **Comments say why, in one line.** Never restate the code. A comment that would go
+  stale is deleted.
+- **A shortcut keeps its limit:** `# shortcut: single-tenant only; add scoping at auth`.
+- **Non-trivial logic leaves one small test** (branch, loop, parser, money, security).
+  Trivial glue needs none — do not pad the suite.
+- **Never cut:** validation at trust boundaries, error handling that prevents data loss,
+  security, accessibility, anything explicitly requested.
 
 ## Layout
 
@@ -192,7 +215,6 @@ uv sync                        # install
 docker compose up -d neo4j     # store
 uv run ncs ingest              # walk → route → extract → validate → load
 uv run ncs resolve             # entity resolution → temporal → conflicts
-uv run ncs verify              # re-check every span against disk; report drift
 uv run ncs serve               # FastAPI on :8000
 uv run ncs-mcp                 # MCP server over stdio
 uv run pytest tests/golden -v  # the seven trap cases

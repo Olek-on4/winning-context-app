@@ -33,12 +33,12 @@ is a lucky guess, and a system that can guess luckily will eventually guess unlu
 
 | Layer | Metric | Target | Method |
 |---|---|---|---|
-| Extraction | span-gate pass rate | ≥ 85% of LLM claims | counted during ingest |
+| Extraction | span-gate pass rate | ≥ 85% of extraction claims | counted during ingest, with `span_corrected` reported separately |
 | Extraction | deterministic claim precision | 100% | 30-claim manual audit |
-| Retrieval | recall@10 on golden anchors | ≥ 0.9 | fixed query set |
+| Retrieval | recall@10 on golden anchors (hybrid + RRF, no rerank) | ≥ 0.8 | fixed query set |
 | Resolution | status accuracy on the 7 traps | 7/7 | golden set |
 | Latency | p95 `context_search`, warm | < 800 ms | timed in the harness |
-| MCP | tool-schema token cost | < 2 000 tokens for all 6 | measured once |
+| MCP | tool-schema token cost | < 1 200 tokens for all 3 | measured once |
 
 RAGAS-style faithfulness/context-precision scoring
 ([sources](research/sources.md#rag-evaluation)) is the right instrument at scale but
