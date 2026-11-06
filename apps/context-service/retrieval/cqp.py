@@ -136,9 +136,13 @@ def validate_plan(plan: dict) -> CQP:
 # An anchor matches the subject entity key or the claim object, so a port or an
 # identifier (`5005`, `REDIS_URL`) resolves without being an entity.
 # shortcut: `c.object` is a label scan; add a full-text index on Claim.object past ~10^5 claims.
+_ANCHOR = (
+    "any(a IN $anchor_keys WHERE toLower(e.key) CONTAINS toLower(a)\n"
+    "                              OR toLower(c.object) CONTAINS toLower(a))"
+)
+
 _FILTER = """MATCH (c:Claim)-[:ABOUT]->(e:Entity)
-WHERE any(a IN $anchor_keys WHERE toLower(e.key) CONTAINS toLower(a)
-                              OR toLower(c.object) CONTAINS toLower(a))
+WHERE """ + _ANCHOR + """
   AND c.status IN $status_in
   AND c.confidence >= $min_confidence
   AND ($as_of IS NULL OR ((c.valid_from IS NULL OR c.valid_from <= $as_of)
@@ -220,12 +224,12 @@ WITH c, e, reduce(m = '', x IN later_ids | CASE WHEN m = '' OR x < m THEN x ELSE
     ),
     Intent.RISKS: (
         """MATCH (c:Claim)-[:ABOUT]->(e:Entity)
-WHERE (any(a IN $anchor_keys WHERE toLower(e.key) CONTAINS toLower(a)) OR c.predicate IN $risk_predicates)
+WHERE ((""" + _ANCHOR + """) OR c.predicate IN $risk_predicates)
   AND c.status IN $status_in
   AND c.confidence >= $min_confidence
   AND ($as_of IS NULL OR ((c.valid_from IS NULL OR c.valid_from <= $as_of)
        AND (c.valid_to IS NULL OR c.valid_to > $as_of)))
-WITH c, e, CASE WHEN any(a IN $anchor_keys WHERE toLower(e.key) CONTAINS toLower(a)) THEN 1 ELSE 0 END AS anchored
+WITH c, e, CASE WHEN """ + _ANCHOR + """ THEN 1 ELSE 0 END AS anchored
 """
         + _citations("c, e, anchored, ")
         + "\n"

@@ -81,10 +81,13 @@ def test_time_defaults_to_valid_and_as_of_binds_as_a_parameter():
 
 def test_anchor_matches_the_object_not_only_the_entity():
     """`Which service listens on port 5005?` returned nothing: 5005 is a claim object,
-    never an entity key, so identifier and port lookups were unreachable."""
-    cypher, _ = compile(make_plan(Intent.LOOKUP))
+    never an entity key, so identifier and port lookups were unreachable. RISKS carried
+    its own copy of the match and kept the old one, hence the loop over every intent."""
+    for intent in Intent:
+        cypher, _ = compile(make_plan(intent))
 
-    assert "toLower(c.object) CONTAINS toLower(a)" in cypher
+        assert "toLower(c.object) CONTAINS toLower(a)" in cypher, intent
+        assert "toLower(e.key) CONTAINS toLower(a)" in cypher, intent
 
 
 def test_superseded_chain_and_conflicts_widen_statuses():
