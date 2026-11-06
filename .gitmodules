@@ -1,0 +1,3 @@
+[submodule "vendor/att-hackathon-task"]
+	path = vendor/att-hackathon-task
+	url = https://github.com/arkik7/att-hackathon-task
