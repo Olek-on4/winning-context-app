@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from models.protocols import ContextBackend
@@ -21,8 +24,22 @@ class PlanBody(BaseModel):
     question: str
 
 
-def create_app(service: ContextBackend) -> FastAPI:
-    """`service` is any ContextBackend: the routes never touch the corpus themselves."""
+def _web_dist() -> Path | None:
+    """The built web UI (`etynt_gui/dist`). Env wins; otherwise walk up to the repo root."""
+    if env := os.getenv("WEB_DIST"):
+        return Path(env).resolve()
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "etynt_gui" / "dist"
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def create_app(service: ContextBackend, web_dist: Path | None = None) -> FastAPI:
+    """`service` is any ContextBackend: the routes never touch the corpus themselves.
+
+    `web_dist` is a built static UI served at `/`. The UI stays its own project and only
+    talks to `/v1/*`; with no build present the app is API-only."""
     app = FastAPI(title="Ety&T — Context Service", version="1.0")
 
     @app.get("/healthz")
@@ -54,5 +71,10 @@ def create_app(service: ContextBackend) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from None
         return Response(content=content, media_type="text/plain; charset=utf-8")
+
+    # Mounted last so /v1/* and /healthz are matched before the static files.
+    web = web_dist or _web_dist()
+    if web is not None and web.is_dir():
+        app.mount("/", StaticFiles(directory=web, html=True), name="web")
 
     return app

@@ -211,3 +211,13 @@ def test_resolve_span_helper_reads_the_pointer() -> None:
     assert json.loads(resolve_span(service, "../../AGENTS.md", 1, 1))["error"] == "path_escapes_corpus"
     assert json.loads(resolve_span(service, "missing.md", 1, 1))["error"] == "not_found"
     assert json.loads(resolve_span(service, "wiki/inventory-service.md", 5, 4))["error"] == "bad_range"
+
+
+def test_one_server_serves_the_web_ui_and_the_api(tmp_path: Path) -> None:
+    (tmp_path / "index.html").write_text("<!doctype html><title>ui</title>", encoding="utf-8")
+    web = TestClient(create_app(StubService(), web_dist=tmp_path))
+
+    page = web.get("/")
+    assert page.status_code == 200 and page.headers["content-type"].startswith("text/html")
+    assert web.get("/healthz").json() == {"status": "ok"}
+    assert web.post("/v1/query", json={"question": "q"}).json() == ENVELOPE
