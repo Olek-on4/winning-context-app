@@ -89,3 +89,26 @@ def test_single_hypothesis_stays_disputed():
     result = resolve([lead])
 
     assert result[lead.claim_id].status is Status.DISPUTED
+
+
+def test_age_only_counts_when_something_newer_contradicts():
+    """A 2024 fact nobody disputes keeps status and score; the decay is relative."""
+    old_undisputed = claim(
+        object="SQLite", predicate="READS_FROM", observed_at=date(2024, 1, 1),
+        valid_from=date(2024, 1, 1), confidence=0.9, authority=0.8,
+    )
+    old_contradicted = claim(
+        object="Redis", observed_at=date(2024, 1, 1), valid_from=date(2024, 1, 1),
+        confidence=0.9, authority=0.8,
+    )
+    later_removal = claim(
+        object="Redis", polarity=Polarity.NEGATES, modality=Modality.DECISION,
+        observed_at=date(2026, 6, 4), valid_from=date(2026, 6, 4),
+        confidence=0.95, authority=0.8,
+    )
+
+    result = resolve([old_undisputed, old_contradicted, later_removal])
+
+    assert result[old_undisputed.claim_id].score == 0.72          # 0.8 × 0.9, no decay
+    assert result[old_contradicted.claim_id].score < 0.72          # decayed by ~880 days
+    assert result[old_contradicted.claim_id].score >= 0.72 * 0.25  # floored

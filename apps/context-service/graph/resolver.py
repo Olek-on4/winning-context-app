@@ -24,6 +24,10 @@ class Status(StrEnum):
 
 
 TIE_MARGIN = 0.15
+# Contradiction-relative freshness (ported from ADR-0007): age only counts against a
+# claim when something newer contradicts it. An old fact nobody disputes stays at 1.0.
+FRESHNESS_HALF_LIFE_DAYS = 180
+FRESHNESS_FLOOR = 0.25
 # Intent is never compared against facts: it is reported as intent.
 INTENT_MODALITIES = {Modality.PROPOSAL, Modality.PLAN}
 
@@ -39,9 +43,17 @@ class Resolved:
     contradicts: list[str] = field(default_factory=list)
 
 
-def score(claim: ClaimRecord) -> float:
-    """Authority × the extractor's own confidence. Recency is handled by supersession."""
-    return claim.authority * claim.confidence
+def freshness(claim: ClaimRecord, newest_rival: date | None) -> float:
+    """Halve per half-life of *contradicted* age, floored. No rival → 1.0."""
+    if newest_rival is None or claim.valid_from is None or newest_rival <= claim.valid_from:
+        return 1.0
+    decay = 0.5 ** ((newest_rival - claim.valid_from).days / FRESHNESS_HALF_LIFE_DAYS)
+    return max(FRESHNESS_FLOOR, decay)
+
+
+def score(claim: ClaimRecord, newest_rival: date | None = None) -> float:
+    """Authority × extractor confidence × contradiction-relative freshness."""
+    return round(claim.authority * claim.confidence * freshness(claim, newest_rival), 4)
 
 
 def resolve(claims: list[ClaimRecord], as_of: date | None = None) -> dict[str, Resolved]:
@@ -77,13 +89,24 @@ def resolve(claims: list[ClaimRecord], as_of: date | None = None) -> dict[str, R
             out[factual[0].claim_id].status = Status.DISPUTED
             continue
 
-        winner = max(factual, key=score)
+        def rivaled(claim: ClaimRecord) -> float:
+            opposite_dates = [
+                c.valid_from or c.observed_at
+                for c in factual
+                if c.polarity is not claim.polarity
+            ]
+            newest = max((d for d in opposite_dates if d), default=None)
+            return score(claim, newest)
+
+        for claim in factual:
+            out[claim.claim_id].score = rivaled(claim)
+        winner = max(factual, key=rivaled)
         same = [c for c in factual if c.polarity is winner.polarity]
         opposite = [c for c in factual if c.polarity is not winner.polarity]
-        best_opposite = max(opposite, key=score) if opposite else None
+        best_opposite = max(opposite, key=rivaled) if opposite else None
 
         # No coin flips: near-equal opposing evidence is reported as disagreement.
-        if best_opposite and score(winner) - score(best_opposite) <= TIE_MARGIN:
+        if best_opposite and rivaled(winner) - rivaled(best_opposite) <= TIE_MARGIN:
             for claim, other in ((winner, best_opposite), (best_opposite, winner)):
                 res = out[claim.claim_id]
                 res.status = Status.DISPUTED
