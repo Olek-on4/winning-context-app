@@ -114,7 +114,7 @@ apps/context-service/     the implementation (Python 3.12)
   ingest/                 walker, router, extraction pipelines      [Dev A]
   graph/                  schema, loader, resolution, temporal      [Dev B]
   retrieval/              embeddings, hybrid search, CQP, assembly  [Dev C]
-  api/                    FastAPI + MCP server                      [Dev D]
+  api/  mcp_server/       FastAPI + MCP server                      [Dev D]
   models/                 ClaimRecord, CQP, ontology enums — SHARED, frozen
 docs/                     design notes, ADRs, research
 data/fixtures/            small, reviewed, committed
@@ -221,12 +221,10 @@ Not yet implemented. These are the contracts the first app must satisfy; replace
 section with the real, tested commands as each lands, and keep it current.
 
 ```sh
-uv sync                        # install
-docker compose up -d neo4j     # store
-uv run ncs ingest              # walk → route → extract → validate → load
-uv run ncs resolve             # entity resolution → temporal → conflicts
-uv run ncs serve               # FastAPI on :8000
-uv run ncs-mcp                 # MCP server over stdio
-uv run pytest tests/golden -v  # the seven trap cases
-uv run ruff check . && uv run ruff format --check .
+uv sync                                          # install (already done)
+docker compose -f ../../infra/neo4j/compose.yaml up -d   # store
+uv run python -m cli load ../../data/fixtures/claims-sample.jsonl
+uv run python -m cli serve                       # REST on :8000
+uv run python -m cli mcp                         # MCP over stdio
+uv run pytest -q                                 # 54 tests, no Neo4j, no model
 ```

@@ -126,7 +126,7 @@ untrusted user input** ([sources](research/sources.md#prompt-injection)).
   "mcpServers": {
     "northstar-context": {
       "command": "uv",
-      "args": ["run", "ncs-mcp"],
+      "args": ["run", "python", "-m", "cli", "mcp"],
       "env": {"NEO4J_URI": "bolt://localhost:7687"}
     }
   }

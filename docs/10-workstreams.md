@@ -15,7 +15,7 @@ the event, so day-of work is wiring — that is what buys the slack, not moving 
 | **Extraction** | Dev A | `apps/context-service/ingest/` | `graph/`, `retrieval/`, `api/` |
 | **Core** | Dev B | `apps/context-service/graph/`, `infra/neo4j/` | `ingest/`, `retrieval/`, `api/` |
 | **Search** | Dev C | `apps/context-service/retrieval/` | `ingest/`, `graph/`, `api/` |
-| **MCP / API** | Dev D | `apps/context-service/api/`, `apps/context-service/mcp/`, `tests/golden/`, `data/fixtures/` | the three above |
+| **MCP / API** | Dev D | `apps/context-service/api/`, `apps/context-service/mcp_server/`, `tests/golden/`, `data/fixtures/` | the three above |
 
 Boundary rule: a cross-lane change is a message to the owner, not a commit. The only
 shared artefacts are the four contracts below; both sides of a contract change together

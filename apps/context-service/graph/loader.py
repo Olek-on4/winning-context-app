@@ -19,6 +19,7 @@ UPSERT_CLAIM = """
 UNWIND $claims AS c
 MERGE (cl:Claim {id: c.id})
 SET cl.predicate = c.predicate,
+    cl.object = c.object,
     cl.polarity = c.polarity,
     cl.modality = c.modality,
     cl.status = c.status,
@@ -63,6 +64,7 @@ def load(driver: Driver, claims: list[ClaimRecord]) -> int:
             "valid_to": r.valid_to.isoformat() if r.valid_to else None,
             "observed_at": r.claim.observed_at.isoformat() if r.claim.observed_at else None,
             "subject": r.claim.subject.key,
+            "object": r.claim.object.key if hasattr(r.claim.object, "key") else str(r.claim.object),
             "spans": [s.model_dump() for s in r.claim.evidence],
         }
         for claim_id, r in resolved.items()
