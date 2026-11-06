@@ -49,14 +49,6 @@ def service():
     with driver.session() as session:
         session.run("MATCH (n) DETACH DELETE n").consume()
     load(driver, claims)
-
-    # Seeds come from the chunk index, so the traps must build it or they silently test
-    # an empty retrieval layer. Lexical only: no model, no embeddings, same RRF path.
-    from graph.chunks import index as index_chunks
-    from sources import discover
-
-    index_chunks(driver, discover([CORPUS]))
-
     yield ContextService(driver, CORPUS)
     driver.close()
 
