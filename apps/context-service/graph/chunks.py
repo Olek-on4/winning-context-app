@@ -54,7 +54,7 @@ def _append_windows(out: list[dict], pointer: str, digest: str, heading: str, bo
 
 
 def chunks_for(root: Root) -> list[dict]:
-    """Heading-aware, line-streamed. One list per file, flushed by the caller."""
+    """Heading-aware, line-streamed. One list per root; the caller flushes it."""
     out: list[dict] = []
     for relative, digest in iter_files(root):
         pointer = root.pointer(relative)
@@ -75,12 +75,40 @@ def chunks_for(root: Root) -> list[dict]:
     return out
 
 
+SWEEP = """
+MATCH (ch:Chunk)-[:IN]->(s:Source)
+WHERE s.path STARTS WITH $prefix AND NOT s.path IN $keep
+DETACH DELETE ch
+"""
+
+ORPHAN_SOURCES = """
+MATCH (s:Source)
+WHERE s.path STARTS WITH $prefix AND NOT (s)<-[:IN]-(:Chunk) AND NOT (s)<-[:IN]-(:Span)
+DETACH DELETE s
+"""
+
+
+def sweep(driver: Driver, root: Root, keep: set[str]) -> int:
+    """Delete chunks whose file vanished or was renamed, scoped to this root's prefix.
+
+    Only root-prefixed sources are swept: fixture spans store bare corpus paths, and those
+    Sources belong to claims, not to the chunk index.
+    """
+    prefix = f"{root.id}/"
+    with driver.session() as session:
+        removed = session.run(SWEEP, prefix=prefix, keep=sorted(keep)).consume().counters.nodes_deleted
+        session.run(ORPHAN_SOURCES, prefix=prefix).consume()
+    return removed
+
+
 def index(driver: Driver, roots: list[Root], embed=None) -> int:
     """Write chunks for every root; `embed(text) -> list[float] | None` adds vectors."""
     written = 0
     batch: list[dict] = []
     for root in roots:
-        for chunk in chunks_for(root):
+        current = chunks_for(root)
+        sweep(driver, root, {chunk["path"] for chunk in current})
+        for chunk in current:
             if embed is not None:
                 vector = embed(chunk["text"])
                 if vector:

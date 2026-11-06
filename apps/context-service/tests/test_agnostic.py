@@ -60,3 +60,56 @@ def test_directory_without_git_skips_claims_instead_of_crashing():
 
         [root] = discover([base])
         assert registry.extract(root) == []
+
+
+def test_reindex_drops_chunks_whose_file_vanished(tmp_path):
+    """Issue 23: a deleted or renamed file must not stay retrievable forever."""
+    from graph.chunks import index, sweep
+    from sources import discover
+
+    class Recorder:
+        """Minimal driver stub: records the sweep statements, no Neo4j needed."""
+
+        def __init__(self):
+            self.calls = []
+
+        def session(self):
+            outer = self
+
+            class Session:
+                def run(self, query, **params):
+                    outer.calls.append((query, params))
+
+                    class Result:
+                        counters = type("C", (), {"nodes_deleted": 0})()
+
+                        def consume(self):
+                            return self
+
+                    return Result()
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *exc):
+                    return False
+
+            return Session()
+
+    keep = tmp_path / "keep.md"
+    keep.write_text("# kept\n\nbody\n", encoding="utf-8")
+    gone = tmp_path / "gone.md"
+    gone.write_text("# gone\n\nbody\n", encoding="utf-8")
+    root = discover([tmp_path])[0]
+
+    index(Recorder(), [root])          # both files indexed
+    gone.unlink()
+    driver = Recorder()
+    index(driver, [root])              # second pass must name only the survivor
+
+    sweeps = [params for query, params in driver.calls if "DETACH DELETE ch" in query]
+    assert sweeps, "no sweep ran"
+    assert sweeps[0]["prefix"] == f"{root.id}/"
+    assert any(path.endswith("keep.md") for path in sweeps[0]["keep"])
+    assert not any(path.endswith("gone.md") for path in sweeps[0]["keep"])
+    assert sweep(driver, root, set()) == 0  # counters surface, nothing raised
