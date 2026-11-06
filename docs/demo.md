@@ -10,7 +10,7 @@ the deterministic claims are recomputed from migrations and `config/ports.json`.
 docker compose -f infra/neo4j/compose.yaml up -d          # neo4j:5-community
 cd apps/context-service
 uv run python -m cli extract                              # 17 deterministic claims
-uv run python -m cli load ../../data/fixtures/claims-sample.jsonl
+uv run python -m cli load ../../data/fixtures/claims-sample.jsonl ../../data/local/claims-extracted.jsonl
 uv run python -m cli index                                # 85 chunks, BM25 (+vectors if Ollama is up)
 uv run python -m cli serve                                # :8000
 ```

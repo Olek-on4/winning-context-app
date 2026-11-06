@@ -83,13 +83,20 @@ def index_corpus() -> None:
     print(json.dumps({"chunks": chunks, "embedded": bool(vector)}))
 
 
-def load_claims(path: str) -> None:
-    """Load a claims JSONL: `ncs-load data/fixtures/claims-sample.jsonl`."""
-    claims = [ClaimRecord.model_validate_json(line) for line in Path(path).read_text().splitlines() if line.strip()]
+def load_claims(*paths: str) -> None:
+    """Load one or more claims JSONL files: fixtures, extracted, or both."""
+    if not paths:
+        raise SystemExit("usage: python -m cli load <file> [<file> ...]")
+    claims = [
+        ClaimRecord.model_validate_json(line)
+        for path in paths
+        for line in Path(path).read_text().splitlines()
+        if line.strip()
+    ]
     driver = _driver()
     apply_schema(driver)
     count = load(driver, claims)
-    print(json.dumps({"loaded": count, "source": path}))
+    print(json.dumps({"loaded": count, "sources": list(paths)}))
 
 
 if __name__ == "__main__":
@@ -105,6 +112,6 @@ if __name__ == "__main__":
     elif command == "index":
         index_corpus()
     elif command == "load" and rest:
-        load_claims(rest[0])
+        load_claims(*rest)
     else:
         raise SystemExit(f"usage: python -m cli [serve|mcp|load <file>]; got {command}")

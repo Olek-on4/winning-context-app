@@ -89,13 +89,24 @@ def _vector(driver, vector: list[float], k: int) -> list[dict]:
 
 
 def _embed(text: str) -> list[float]:
+    """One embedding from a local model. `num_gpu: -1` puts every layer on the GPU;
+    Ollama falls back to CPU by itself when no device is visible."""
     host = os.environ.get("OLLAMA_HOST", DEFAULT_HOST).rstrip("/")
     model = os.environ.get("OLLAMA_EMBED_MODEL", DEFAULT_EMBED_MODEL)
+    options = {
+        "num_gpu": int(os.environ.get("OLLAMA_NUM_GPU", "-1")),
+        "keep_alive": os.environ.get("OLLAMA_KEEP_ALIVE", "30m"),
+    }
     response = httpx.post(
-        f"{host}/api/embed", json={"model": model, "input": text[:4000]}, timeout=5.0
+        f"{host}/api/embed",
+        json={"model": model, "input": text[:4000], "options": options, "keep_alive": options["keep_alive"]},
+        timeout=60.0,
     )
     response.raise_for_status()
-    return list(response.json()["embeddings"][0])
+    vectors = response.json().get("embeddings") or []
+    if not vectors or len(vectors[0]) != 768:
+        raise ValueError(f"expected a 768-d embedding from {model}")
+    return list(vectors[0])
 
 
 def _chunk(props: dict, score: float, via: str, path: str = "") -> dict:
