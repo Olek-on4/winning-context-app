@@ -3,6 +3,7 @@
     uv run python -m cli serve          # REST on :8000
     uv run python -m cli mcp            # MCP over stdio
     uv run python -m cli load <file>    # claims JSONL into the graph
+    uv run python -m cli index          # chunk the corpus for hybrid search
 
 No business logic here — every line is wiring.
 """
@@ -13,6 +14,7 @@ import json
 import os
 from pathlib import Path
 
+from graph.chunks import index as index_chunks
 from graph.loader import apply_schema, connect, load
 from models.claim import ClaimRecord
 from retrieval.service import ContextService
@@ -55,6 +57,13 @@ def serve_mcp() -> None:
     run(_service())
 
 
+def index_corpus() -> None:
+    """`... cli index`: chunk the corpus and fill the BM25 index (no model needed)."""
+    driver = _driver()
+    apply_schema(driver)
+    print(json.dumps({"chunks": index_chunks(driver, _corpus_root())}))
+
+
 def load_claims(path: str) -> None:
     """Load a claims JSONL: `ncs-load data/fixtures/claims-sample.jsonl`."""
     claims = [ClaimRecord.model_validate_json(line) for line in Path(path).read_text().splitlines() if line.strip()]
@@ -72,6 +81,8 @@ if __name__ == "__main__":
         serve()
     elif command == "mcp":
         serve_mcp()
+    elif command == "index":
+        index_corpus()
     elif command == "load" and rest:
         load_claims(rest[0])
     else:

@@ -288,3 +288,12 @@ def test_hybrid_with_no_index_data_is_degraded(monkeypatch):
             return []
 
     assert hybrid.search(EmptyDriver(), "redis") == ([], True)
+
+
+def test_empty_graph_falls_back_to_evidence_candidates_not_claims(corpus):
+    """A chunk is a lead, never a claim: no claims, but the gap names where to look."""
+    service = ContextService(FakeDriver([]), corpus)
+    result = service.answer(QUESTION, intent="LOOKUP")
+
+    assert result["claims"] == []
+    assert any("evidence candidates" in gap or "No claims matched" in gap for gap in result["gaps"])

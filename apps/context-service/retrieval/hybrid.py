@@ -17,14 +17,16 @@ DEFAULT_EMBED_MODEL = "nomic-embed-text"
 
 _BM25 = """
 CALL db.index.fulltext.queryNodes('chunk_text', $q) YIELD node, score
-RETURN node, score
+OPTIONAL MATCH (node)-[:IN]->(src:Source)
+RETURN node, score, src.path AS path
 ORDER BY score DESC
 LIMIT $k
 """
 
 _VECTOR = """
 CALL db.index.vector.queryNodes('chunk_embedding', $k, $vector) YIELD node, score
-RETURN node, score
+OPTIONAL MATCH (node)-[:IN]->(src:Source)
+RETURN node, score, src.path AS path
 ORDER BY score DESC
 LIMIT $k
 """
@@ -77,13 +79,13 @@ def _bm25(driver, text: str, k: int) -> list[dict]:
         return []
     with driver.session() as session:
         result = session.run(_BM25, q=escaped, k=k)
-        return [_chunk(dict(record["node"]), record["score"], "bm25") for record in result]
+        return [_chunk(dict(record["node"]), record["score"], "bm25", record.get("path") or "") for record in result]
 
 
 def _vector(driver, vector: list[float], k: int) -> list[dict]:
     with driver.session() as session:
         result = session.run(_VECTOR, k=k, vector=list(vector))
-        return [_chunk(dict(record["node"]), record["score"], "vector") for record in result]
+        return [_chunk(dict(record["node"]), record["score"], "vector", record.get("path") or "") for record in result]
 
 
 def _embed(text: str) -> list[float]:
@@ -96,8 +98,8 @@ def _embed(text: str) -> list[float]:
     return list(response.json()["embeddings"][0])
 
 
-def _chunk(props: dict, score: float, via: str) -> dict:
-    path = str(props.get("path") or props.get("source_path") or "")
+def _chunk(props: dict, score: float, via: str, path: str = "") -> dict:
+    path = path or str(props.get("path") or props.get("source_path") or "")
     start = props.get("start_line")
     end = props.get("end_line")
     lines = [int(start), int(end)] if start is not None and end is not None else []

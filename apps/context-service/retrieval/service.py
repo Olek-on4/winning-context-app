@@ -103,8 +103,18 @@ class ContextService:
 
         claims, conflicts, assemble_gaps = self._assemble(rows, plan)
         gaps.extend(assemble_gaps)
-        if not rows and not degraded:
-            gaps.append("No claims matched the plan.")
+        if not rows:
+            # Nothing in the graph: say what the text search still found, without
+            # promoting a chunk to a claim.
+            chunks, chunk_degraded = _hybrid(self.driver, question)
+            if chunks:
+                listed = ", ".join(
+                    f"{c['path']}:{c['lines'][0]}" if c["lines"] else c["path"] for c in chunks[:3]
+                )
+                gaps.append(f"No claims matched; evidence candidates were {listed}.")
+            else:
+                gaps.append("No claims matched the plan.")
+            degraded = degraded or chunk_degraded
 
         answer = _answer_text(claims)
         claims, conflicts, truncated = _spend_budget(
