@@ -1,17 +1,15 @@
-"""stdio MCP server: three workflow tools plus the citation reader, all over ContextService.
+"""stdio MCP server: three workflow tools plus the citation reader, all over a ContextBackend.
 
-Same service object as REST, so tool behaviour is testable without an MCP client.
+Same backend object as REST, so tool behaviour is testable without an MCP client.
 """
 
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 
-from api.spans import read_span
+from models.protocols import ContextBackend
 
 INTENT_BY_TOOL = {
     "context_search": "STATE_OF",
@@ -21,7 +19,7 @@ INTENT_BY_TOOL = {
 
 
 def _answer_json(
-    service: Any,
+    service: ContextBackend,
     question: str,
     intent: str,
     *,
@@ -37,7 +35,7 @@ def _answer_json(
 
 
 def context_search(
-    service: Any,
+    service: ContextBackend,
     question: str,
     *,
     as_of: str | None = None,
@@ -48,7 +46,7 @@ def context_search(
 
 
 def context_explain_relationship(
-    service: Any,
+    service: ContextBackend,
     question: str,
     *,
     as_of: str | None = None,
@@ -59,7 +57,7 @@ def context_explain_relationship(
 
 
 def context_risks(
-    service: Any,
+    service: ContextBackend,
     question: str,
     *,
     as_of: str | None = None,
@@ -69,10 +67,10 @@ def context_risks(
     return _answer_json(service, question, "RISKS", as_of=as_of, status_in=status_in, token_budget=token_budget)
 
 
-def resolve_span(service: Any, path: str, start: int, end: int) -> str:
+def resolve_span(service: ContextBackend, path: str, start: int, end: int) -> str:
     """Return the bytes a citation points at, or a JSON error instead of raising."""
     try:
-        content = read_span(Path(service.corpus_root).resolve(), path, start, end)
+        content = service.spans.read(path, start, end)
     except FileNotFoundError:
         return json.dumps({"error": "not_found", "path": path}, sort_keys=True)
     except PermissionError:
@@ -85,8 +83,8 @@ def resolve_span(service: Any, path: str, start: int, end: int) -> str:
         return json.dumps({"error": "not_utf8", "path": path}, sort_keys=True)
 
 
-def build_server(service: Any) -> MCPServer:
-    """Bind the tools to one service instance; the caller owns the driver."""
+def build_server(service: ContextBackend) -> MCPServer:
+    """Bind the tools to one backend instance; the caller owns its lifetime."""
     server = MCPServer(name="northstar-context", version="1.0")
 
     @server.tool(name="context_search")
@@ -129,6 +127,6 @@ def build_server(service: Any) -> MCPServer:
     return server
 
 
-def serve(service: Any) -> None:
+def serve(service: ContextBackend) -> None:
     """Blocking stdio entry point for `ncs-mcp`."""
     build_server(service).run(transport="stdio")

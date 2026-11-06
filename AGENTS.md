@@ -215,6 +215,17 @@ The repo must not drown in documentation. These rules are about keeping it small
 - **Stay in your lane.** Workstream owners are listed under Layout. Editing another
   workstream's module means telling that owner before you commit.
 
+## Commit gate and make targets
+
+`make check` (lint + tests) runs automatically on every commit via
+`.githooks/pre-commit`; enable it once per clone with `make install-hooks`. A failing gate
+blocks the commit, which is the point.
+
+**Agents never run make targets.** The hook runs them. Agents write code, run their own
+narrowed test file, and let the commit gate decide.
+
+`make up | down | extract | index | load | serve | mcp | demo | test | lint | fmt | rehearse | check`
+
 ## Commands
 
 Not yet implemented. These are the contracts the first app must satisfy; replace this

@@ -50,7 +50,7 @@ class Span(BaseModel):
     content_hash: str
 
     @model_validator(mode="after")
-    def _ordered(self) -> "Span":
+    def _ordered(self) -> Span:
         if self.end_line < self.start_line:
             raise ValueError("end_line before start_line")
         return self

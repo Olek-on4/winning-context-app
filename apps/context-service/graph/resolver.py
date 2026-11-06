@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from enum import StrEnum
 
-from models.claim import ClaimRecord, Modality, Polarity
+from models.claim import ClaimRecord, Modality
 
 
 class Status(StrEnum):
@@ -89,7 +89,7 @@ def resolve(claims: list[ClaimRecord], as_of: date | None = None) -> dict[str, R
             out[factual[0].claim_id].status = Status.DISPUTED
             continue
 
-        def rivaled(claim: ClaimRecord) -> float:
+        def rivaled(claim: ClaimRecord, factual: list[ClaimRecord] = factual) -> float:
             opposite_dates = [
                 c.valid_from or c.observed_at
                 for c in factual

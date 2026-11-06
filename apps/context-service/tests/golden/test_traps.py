@@ -9,7 +9,6 @@ answer with the wrong citation is a lucky guess. Skipped when Neo4j is not runni
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -31,7 +30,7 @@ def service():
     try:
         driver = connect("bolt://localhost:7687", "neo4j", "northstar")
         driver.verify_connectivity()
-    except Exception:  # noqa: BLE001 - any connection failure means "skip"
+    except Exception:  # any connection failure means "skip"
         pytest.skip("Neo4j not reachable")
 
     # Both sources on purpose: deterministic extraction and reviewed fixtures must
@@ -87,7 +86,8 @@ def test_g2_renamed_column_is_not_reported_as_current(service):
         for name, s in table.items()
         if name.endswith("status") and "account" not in name and " NOT " not in name
     )
-    assert "apps/user-service/migrations/002-account-tiers.sql" in cited_paths(result)
+    # Extracted pointers carry their root id; fixture pointers are bare. Compare suffixes.
+    assert any(p.endswith("apps/user-service/migrations/002-account-tiers.sql") for p in cited_paths(result))
 
 
 def test_g3_superseded_contract_is_deprecated(service):
@@ -119,7 +119,7 @@ def test_g6_sso_is_proposed_never_valid(service):
     result = ask(service, "Do we have SSO between People and Accounts?")
     table = statuses(result)
 
-    sso = {name: s for name, s in table.items() if "sso" in name.lower()}
+    sso = {name: s for name, s in table.items() if "employee-sso" in name.lower()}
     assert any(s == "PROPOSED" for s in sso.values())
     # The release says SSO is *not* implemented; that negation being VALID is the point.
     assert all(s != "VALID" for name, s in sso.items() if " NOT " not in name)

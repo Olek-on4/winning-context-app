@@ -13,7 +13,7 @@ from datetime import date
 
 import httpx
 
-from retrieval.cqp import Anchor, CQP, Intent, TimeFilter, Traverse, validate_plan
+from retrieval.cqp import CQP, Anchor, Intent, TimeFilter, Traverse, validate_plan
 
 DEFAULT_HOST = "http://localhost:11434"
 DEFAULT_MODEL = "llama3.2"
@@ -196,7 +196,7 @@ def _as_of(question: str) -> str | None:
 # Words that carry no anchor value; keeps plain-English questions findable.
 _STOPWORDS = {
     "the", "a", "an", "is", "are", "was", "were", "does", "do", "did", "still", "have",
-    "has", "had", "what", "which", "who", "how", "where", "when", "why", "does", "any",
+    "has", "had", "what", "which", "who", "how", "where", "when", "why", "any",
     "and", "or", "of", "in", "on", "for", "to", "from", "with", "about", "use", "uses",
     "using", "table", "fields", "field", "columns", "system", "service", "there", "tell",
     "me", "we", "it", "current", "currently", "now", "status", "value",
@@ -232,7 +232,7 @@ def _kind(token: str) -> str:
         return "Port"
     if re.fullmatch(r"[A-Z][A-Z0-9_]+", token):
         return "EnvVar"
-    if token.endswith("-service") or token.endswith("-gateway"):
+    if token.endswith(("-service", "-gateway")):
         return "Service"
     return "ANY"
 

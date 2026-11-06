@@ -6,12 +6,10 @@ against the corpus at read time, so a stale graph cannot produce a false citatio
 
 from __future__ import annotations
 
-import hashlib
-from pathlib import Path
-
 from graph.resolver import Status
 from retrieval import hybrid, planner
-from retrieval.cqp import MAX_NODES, MAX_SPANS, CQP, compile as compile_cqp, validate_plan
+from retrieval.cqp import CQP, MAX_NODES, MAX_SPANS, validate_plan
+from retrieval.cqp import compile as compile_cqp
 
 _STATUS_RANK = {
     Status.VALID.value: 0,
@@ -34,10 +32,19 @@ _CLAIM_FIELDS = (
 
 
 class ContextService:
-    def __init__(self, driver, corpus_root: Path):
+    def __init__(self, driver, corpus_root):
+        """`corpus_root` is a Path (single tree) or a `SpanStore` (any number of roots)."""
+        from pathlib import Path as _Path
+
+        from sources import SpanStore
+
         self.driver = driver
-        self.corpus_root = Path(corpus_root)
-        self._documents: dict[str, tuple[list[str], str] | None] = {}
+        if isinstance(corpus_root, SpanStore):
+            self.spans = corpus_root
+        else:
+            from sources import discover
+
+            self.spans = SpanStore(discover([_Path(corpus_root)]))
 
     def plan(self, question: str, *, intent: str | None = None) -> dict:
         """The query plan, inspectable and unexecuted: /v1/plan's whole contract."""
@@ -189,6 +196,9 @@ class ContextService:
             ),
         )[: min(plan.traverse.max_nodes, MAX_NODES)]
 
+        if plan.time.as_of:
+            claims = _as_of_view(claims, plan.time.as_of)
+
         _link_superseded(claims)
         conflicts = _conflicts(claims) if plan.output.include_conflicts else []
 
@@ -215,13 +225,17 @@ class ContextService:
                 gaps.append(f"Citation {path} has non-numeric lines.")
                 continue
 
-            document = self._document(path)
-            if document is None:
-                gaps.append(f"Citation {path} is outside the corpus root.")
+            try:
+                self.spans.read(path, start, end)
+                digest = self.spans.hash(path)
+            except FileNotFoundError:
+                gaps.append(f"Citation {path} is outside every registered root.")
                 continue
-            lines, digest = document
-            if not 1 <= start <= end <= len(lines):
-                gaps.append(f"Citation {path}:{start}-{end} is outside the file.")
+            except PermissionError:
+                gaps.append(f"Citation {path} escapes its root.")
+                continue
+            except ValueError as exc:
+                gaps.append(f"Citation {path}:{start}-{end} is outside the file ({exc}).")
                 continue
             stored = str(item.get("hash") or "").strip()
             if stored and not (digest.startswith(stored) or stored.startswith(digest)):
@@ -234,23 +248,6 @@ class ContextService:
             out.append({"path": path, "lines": [start, end], "hash": stored or digest})
 
         return out, gaps
-
-    def _document(self, path: str) -> tuple[list[str], str] | None:
-        if path in self._documents:
-            return self._documents[path]
-        document: tuple[list[str], str] | None = None
-        try:
-            root = self.corpus_root.resolve()
-            target = (root / path).resolve()
-            if target.is_relative_to(root) and target.is_file():
-                raw = target.read_bytes()
-                text = raw.decode("utf-8", errors="replace")
-                document = (text.splitlines(), hashlib.sha256(raw).hexdigest())
-        except OSError:
-            document = None
-        self._documents[path] = document
-        return document
-
 
 def _execute(driver, cypher: str, params: dict) -> list[dict]:
     with driver.session() as session:
@@ -293,6 +290,23 @@ def _statement(row: dict) -> str:
     if obj is not None and str(obj):
         parts.append(str(obj))
     return " ".join(part for part in parts if part)
+
+
+def _as_of_view(claims: list[dict], as_of: str) -> list[dict]:
+    """Point in time: a claim superseded later was still true then, and a claim that
+    starts later did not exist. Status is recomputed, never trusted from the snapshot."""
+    view: list[dict] = []
+    for claim in claims:
+        started = claim.get("valid_from")
+        if started and started > as_of:
+            continue
+        ended = claim.get("valid_to")
+        if ended and ended <= as_of:
+            continue
+        if claim["status"] == Status.DEPRECATED.value:
+            claim = {**claim, "status": Status.VALID.value, "superseded_by": None}
+        view.append(claim)
+    return view
 
 
 def _link_superseded(claims: list[dict]) -> None:

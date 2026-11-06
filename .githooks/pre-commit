@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Commit gate: ruff + tests. Bypass with `SKIP_HOOKS=1 git commit ...`.
+set -euo pipefail
+[ "${SKIP_HOOKS:-}" = "1" ] && exit 0
+exec make -s -C "$(git rev-parse --show-toplevel)" check

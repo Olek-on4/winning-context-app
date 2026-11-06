@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Keep origin in sync after every commit; never block the commit itself.
+set -u
+branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+[ -z "$branch" ] && exit 0
+git push origin "HEAD:$branch" --quiet || echo "post-commit: push failed for $branch"

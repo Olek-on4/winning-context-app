@@ -7,7 +7,7 @@ import re
 import pytest
 from pydantic import ValidationError
 
-from retrieval.cqp import MAX_HOPS, MAX_NODES, CQP, Intent, compile, validate_plan
+from retrieval.cqp import CQP, MAX_HOPS, MAX_NODES, Intent, compile, validate_plan
 
 ALL_INTENTS = list(Intent)
 

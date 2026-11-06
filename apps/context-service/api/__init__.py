@@ -1,1 +1,1 @@
-"""REST transport over ContextService."""
+"""REST transport over any ContextBackend."""

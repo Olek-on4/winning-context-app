@@ -42,7 +42,7 @@ class Anchor(BaseModel):
     match: Literal["exact", "hybrid"] | None = None
 
     @model_validator(mode="after")
-    def _one_pointer(self) -> "Anchor":
+    def _one_pointer(self) -> Anchor:
         if self.key == "":
             self.key = None
         if self.text == "":

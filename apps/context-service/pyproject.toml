@@ -15,7 +15,17 @@ dependencies = [
 [dependency-groups]
 dev = [
   "pytest>=8.3",
+  "ruff>=0.8",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+# Degrading to a smaller answer is a designed behaviour (docs/06), so the broad
+# excepts and the empty-pass fallbacks are deliberate, not accidents.
+ignore = ["BLE001", "S110", "C408"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

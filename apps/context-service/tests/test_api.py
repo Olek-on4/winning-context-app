@@ -20,6 +20,7 @@ from mcp_server.server import (
     context_search,
     resolve_span,
 )
+from sources import SpanStore, discover
 
 CORPUS = Path(__file__).resolve().parents[3] / "vendor" / "att-hackathon-task"
 
@@ -56,7 +57,7 @@ CQP = {
 
 
 class StubService:
-    corpus_root = CORPUS
+    spans = SpanStore(discover([CORPUS]))
 
     def __init__(self) -> None:
         self.answers: list[dict] = []
@@ -144,14 +145,14 @@ def test_span_returns_the_cited_bytes() -> None:
     assert b"Redis read cache" in response.content
 
 
-@pytest.mark.parametrize("path", ["../../AGENTS.md", "/etc/passwd"])
+@pytest.mark.parametrize("path", ["../../AGENTS.md", "/etc/passwd", "wiki"])
 def test_span_rejects_paths_outside_the_corpus(path: str) -> None:
     response = client().get("/v1/span", params={"path": path, "start": 1, "end": 1})
 
     assert response.status_code == 400
 
 
-@pytest.mark.parametrize("path", ["wiki/does-not-exist.md", "wiki"])
+@pytest.mark.parametrize("path", ["wiki/does-not-exist.md"])
 def test_span_missing_file_is_404(path: str) -> None:
     response = client().get("/v1/span", params={"path": path, "start": 1, "end": 1})
 

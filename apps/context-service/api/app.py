@@ -1,14 +1,13 @@
-"""FastAPI transport. Routes translate HTTP into ContextService calls; no rules live here."""
+"""FastAPI transport. Routes translate HTTP into ContextBackend calls; no rules live here."""
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 
-from api.spans import read_span
+from models.protocols import ContextBackend
 
 
 class QueryBody(BaseModel):
@@ -22,10 +21,9 @@ class PlanBody(BaseModel):
     question: str
 
 
-def create_app(service: Any) -> FastAPI:
-    """`service` exposes `answer(...)` and `plan(question)` plus `corpus_root`."""
+def create_app(service: ContextBackend) -> FastAPI:
+    """`service` is any ContextBackend: the routes never touch the corpus themselves."""
     app = FastAPI(title="Northstar Context Service", version="1.0")
-    corpus_root = Path(service.corpus_root).resolve()
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
@@ -48,9 +46,9 @@ def create_app(service: Any) -> FastAPI:
     @app.get("/v1/span")
     def span(path: str, start: int, end: int) -> Response:
         try:
-            content = read_span(corpus_root, path, start, end)
+            content = service.spans.read(path, start, end)
         except PermissionError:
-            raise HTTPException(400, "path escapes the corpus") from None
+            raise HTTPException(400, "path is not a readable file inside the corpus") from None
         except FileNotFoundError:
             raise HTTPException(404, "no such corpus file") from None
         except ValueError as exc:
