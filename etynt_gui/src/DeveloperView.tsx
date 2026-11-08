@@ -12,14 +12,19 @@ function Citations({ result, onSpan }: { result: Record<string, unknown>; onSpan
   const cited = claims.flatMap((c) => (c.citations ?? []).map((cit) => ({ ...cit, statement: c.statement })))
   if (cited.length === 0) return null
   return (
-    <div className="dev-citations">
-      <p className="eyebrow">Citations - click to read the source bytes</p>
-      {cited.slice(0, 8).map((c) => (
-        <button key={`${c.path}:${c.lines[0]}:${c.statement}`} type="button" className="dev-cite" onClick={() => onSpan(c)}>
-          <code>{c.path}:{c.lines[0]}-{c.lines[1]}</code>
-          <span>{c.statement}</span>
-        </button>
-      ))}
+    <div className="bin stack">
+      <div className="section-head cluster">
+        <h3>Citations</h3>
+        <span className="count">click to read the source bytes</span>
+      </div>
+      <div className="stack">
+        {cited.slice(0, 8).map((c) => (
+          <button key={`${c.path}:${c.lines[0]}:${c.statement}`} type="button" className="source" onClick={() => onSpan(c)}>
+            <span><code>{c.path}:{c.lines[0]}-{c.lines[1]}</code><small>{c.statement}</small></span>
+            <b>-&gt;</b>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -107,21 +112,25 @@ export default function DeveloperView() {
   }
 
   return (
-    <section className="dev">
-      <header className="dev-head">
-        <h2>API</h2>
-        <p>One service, two transports: REST and MCP. The same call, shown as the request and the response.</p>
-      </header>
+    <section className="api stack">
+      <div className="section-head cluster">
+        <h3>API</h3>
+        <span className="count">{tools.length} tools</span>
+      </div>
+      <p>One service, two transports: REST and MCP. The same call, shown as the request and the response.</p>
 
-      <div className="dev-layout">
-        <div className="dev-left">
-          <p className="eyebrow dev-pane-label">Tools</p>
-          <div className="dev-tools">
+      <div className="grid grid-2">
+        <div className="bin stack">
+          <div className="section-head cluster">
+            <h3>Tools</h3>
+            <span className="count">{tools.length}</span>
+          </div>
+          <div className="tools stack">
             {tools.map((t) => (
               <button
                 key={t.name}
                 type="button"
-                className={`dev-tool ${t.name === name ? 'active' : ''}`}
+                className={`tool ${t.name === name ? 'active' : ''}`}
                 onClick={() => {
                   setName(t.name)
                   setValues(seed(t))
@@ -136,11 +145,11 @@ export default function DeveloperView() {
             ))}
           </div>
 
-          <div className="dev-form">
+          <div className="fields stack">
             {Object.entries(spec?.params ?? {})
               .filter(([, p]) => p.required || p.type !== 'array')
               .map(([key, p]) => (
-                <label key={key} className="dev-field">
+                <label key={key} className="field">
                   <span>{key}{p.required ? ' *' : ''}</span>
                   <input
                     type={p.format === 'date' ? 'date' : 'text'}
@@ -150,53 +159,65 @@ export default function DeveloperView() {
                   />
                 </label>
               ))}
-            <button type="button" className="search-button" onClick={run} disabled={busy}>
-              {busy ? 'Running…' : 'Run tool'}
-            </button>
           </div>
+          <div><button type="button" className="button" onClick={run} disabled={busy}>
+            {busy ? 'Running…' : 'Run tool'}
+          </button></div>
 
-          <pre className="dev-request">{`POST /v1/mcp/${name}\n${pretty({ params: paramsFor(spec) })}`}</pre>
+          <p className="result-where">POST /v1/mcp/{name}</p>
+          <pre className="pane">{pretty({ params: paramsFor(spec) })}</pre>
         </div>
 
-        <div className="dev-right">
-          <p className="eyebrow dev-pane-label">Response {call && (call.result.claims ? `· ${(call.result.claims as unknown[]).length} claims` : '· span')}</p>
-          {error ? <p className="dev-error">{error}</p> : <pre className="dev-response">{call ? pretty(call.result) : 'Run a tool to see its answer.'}</pre>}
+        <div className="bin stack">
+          <div className="section-head cluster">
+            <h3>Response</h3>
+            <span className="count">{call ? (call.result.claims ? `${(call.result.claims as unknown[]).length} claims` : 'span') : 'no call yet'}</span>
+          </div>
+          {error ? <div className="state error"><p>{error}</p></div> : <pre className="pane">{call ? pretty(call.result) : 'Run a tool to see its answer.'}</pre>}
         </div>
       </div>
 
       {call && call.tool !== 'resolve_span' && <Citations result={call.result} onSpan={readSpan} />}
 
       {span && (
-        <div className="dev-span">
-          <p className="eyebrow">Source bytes · {span.path}</p>
-          <pre>{span.text}</pre>
+        <div className="bin stack">
+          <div className="section-head cluster">
+            <h3>Source bytes</h3>
+            <span className="count">{span.path}</span>
+          </div>
+          <pre className="pane">{span.text}</pre>
         </div>
       )}
 
       {spec && (
-        <div className="dev-spec">
-          <p className="eyebrow">Parameters accepted by {spec.name}</p>
-          <ul>
-            {Object.entries(spec.params).map(([key, p]) => (
-              <li key={key}>
-                <code>{key}</code> {p.type}
-                {p.required ? ' · required' : ''}
-                {p.default !== undefined ? ` · default ${String(p.default)}` : ''}
-              </li>
-            ))}
-          </ul>
+        <div className="bin stack">
+          <div className="section-head cluster">
+            <h3>Parameters accepted by {spec.name}</h3>
+            <span className="count">{Object.keys(spec.params).length}</span>
+          </div>
+          <div className="paper">
+            <h4>{spec.name}</h4>
+            <dl>
+              {Object.entries(spec.params).map(([key, p]) => (
+                <div key={key}><dt>{key}</dt><dd>{p.type}{p.required ? ', required' : ''}{p.default !== undefined ? `, default ${String(p.default)}` : ''}</dd></div>
+              ))}
+            </dl>
+          </div>
         </div>
       )}
 
-      <div className="dev-trace">
-        <p className="eyebrow">HTTP trace - every call this page made ({api.traces.length})</p>
+      <div className="trace stack">
+        <div className="section-head cluster">
+          <h3>HTTP trace</h3>
+          <span className="count">every call this page made, {api.traces.length}</span>
+        </div>
         {api.traces.map((t) => (
           <details key={t.id}>
             <summary>
               <code>{t.method} {t.url}</code>
               <em>{t.status} · {t.ms} ms</em>
             </summary>
-            <pre>{pretty({ request: t.request, status: t.status, response: t.response })}</pre>
+            <pre className="pane">{pretty({ request: t.request, status: t.status, response: t.response })}</pre>
           </details>
         ))}
       </div>

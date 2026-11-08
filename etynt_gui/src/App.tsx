@@ -167,11 +167,6 @@ function App() {
             <img src={logo} alt="" />
             <span>ETY&amp;T</span>
           </button>
-          <nav className="topnav cluster" aria-label="Workspace">
-            <button className={`nav-link ${view === 'search' ? 'active' : ''}`} type="button" onClick={() => { setView('search'); setNavOpen(false) }}>Search</button>
-            <button className={`nav-link ${view === 'history' ? 'active' : ''}`} type="button" onClick={() => { setView('history'); setNavOpen(false) }}>History</button>
-            <button className={`nav-link ${view === 'api' ? 'active' : ''}`} type="button" onClick={() => { setView('api'); setNavOpen(false) }}>API</button>
-          </nav>
         </div>
         <div className={`connection cluster ${online === false ? 'offline' : ''}`} role="status">
           <span className="connection-dot" aria-hidden="true" />
@@ -181,13 +176,13 @@ function App() {
 
       <div className="body with-sidebar">
         <aside className={`rail stack ${navOpen ? 'open' : ''}`}>
-          <nav className="stack rail-nav" aria-label="Views">
+          <nav className="stack rail-nav rail-group" aria-label="Views">
             <button className={`rail-link ${view === 'search' ? 'active' : ''}`} type="button" onClick={() => { setView('search'); setNavOpen(false) }}>Search</button>
             <button className={`rail-link ${view === 'history' ? 'active' : ''}`} type="button" onClick={() => { setView('history'); setNavOpen(false) }}>History {history.length > 0 && <em>{history.length}</em>}</button>
             <button className={`rail-link ${view === 'api' ? 'active' : ''}`} type="button" onClick={() => { setView('api'); setNavOpen(false) }}>API</button>
           </nav>
 
-          <div className="stack">
+          <div className="rail-group stack">
             <p className="rail-label">Try a trap</p>
             <div className="stack">
               {EXAMPLES.map((q) => <button key={q} className="rail-example" type="button" onClick={() => ask(q)}>{q}</button>)}
@@ -475,7 +470,7 @@ function Card({ claim, warn, onCitation }: { claim: Claim; warn: boolean; onCita
   return (
     <article className={`card box stack ${cls} ${warn ? 'stale' : ''}`}>
       <div className="card-top cluster">
-        <span className={`pill cluster ${cls}`}><i aria-hidden="true">{GLYPH[cls] ?? '\u25c7'}</i>{claim.status}</span>
+        <span className={`status ${cls}`}><i aria-hidden="true">{GLYPH[cls] ?? '◇'}</i>{claim.status}</span>
         <h4 className="card-statement">{claim.statement}</h4>
         <span className="confidence"><b>{api.pct(claim.confidence)}</b></span>
         <button type="button" className="expander" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? 'less' : 'details'}</button>
@@ -607,14 +602,15 @@ function Timeline({ claims }: { claims: Claim[] }) {
         <span className="count">{events.length} events</span>
       </div>
       {events.length === 0 ? <p className="muted">None of these claims carries a date.</p> : (
-        <div className="timeline stack">
+        <ol className="timeline">
           {events.map((e, i) => (
-            <div className="timeline-row" key={`${e.date}-${i}`}>
-              <time>{e.date}</time>
-              <div><p>{e.text}</p><small>{e.note}</small></div>
-            </div>
+            <li key={`${e.date}-${i}`}>
+              <time dateTime={e.date}>{i > 0 && events[i - 1].date === e.date ? '' : e.date}</time>
+              <span className="tick" aria-hidden="true" />
+              <div className="event-body"><p>{e.text}</p><small>{e.note}</small></div>
+            </li>
           ))}
-        </div>
+        </ol>
       )}
     </section>
   )
