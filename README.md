@@ -1,18 +1,21 @@
 <div align="center">
-  <img src="etynt_gui/src/assets/northstar-bookshelf.png" width="120" alt="Ety&amp;T logo">
+  <img src="etynt_gui/src/assets/northstar-bookshelf.png" width="168" alt="Ety&amp;T logo">
+
+  <h1>Ety&amp;T</h1>
+
+  <p><b>Etymology &amp; Translation</b></p>
+
+  <p>Answers questions about an engineering repository from dated, status-labelled claims,
+  each traced to the file and line it came from.</p>
+
+  <p>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MPL--2.0-blue?style=flat-square" alt="License: MPL 2.0"></a>
+    <a href="apps/context-service/pyproject.toml"><img src="https://img.shields.io/badge/python-3.12-blue?style=flat-square" alt="Python 3.12"></a>
+    <a href="apps/context-service/tests"><img src="https://img.shields.io/badge/tests-228%20passed-brightgreen?style=flat-square" alt="Tests: 228 passed"></a>
+    <a href="infra/neo4j/compose.yaml"><img src="https://img.shields.io/badge/stack-Neo4j%205%20%2B%20Ollama-bluegrey?style=flat-square" alt="Stack: Neo4j 5 and Ollama"></a>
+    <a href="#try-it"><img src="https://img.shields.io/badge/status-demo--ready-orange?style=flat-square" alt="Status: demo ready"></a>
+  </p>
 </div>
-
-# Ety&T
-
-<p align="center"><b>Etymology &amp; Translation</b></p>
-
-<p align="center">Answers questions about an engineering repository from dated, status-labelled claims, each traced to the file and line it came from.</p>
-
-[![license](https://img.shields.io/badge/license-MPL--2.0-blue?style=flat-square)](LICENSE)
-[![python](https://img.shields.io/badge/python-3.12-blue?style=flat-square)](apps/context-service/pyproject.toml)
-[![tests](https://img.shields.io/badge/tests-228%20passed-brightgreen?style=flat-square)](apps/context-service/tests)
-[![stack](https://img.shields.io/badge/stack-Neo4j%205%20%2B%20Ollama-bluegrey?style=flat-square)](infra/neo4j/compose.yaml)
-[![status](https://img.shields.io/badge/status-demo--ready-orange?style=flat-square)](#try-it)
 
 ## What it does
 
