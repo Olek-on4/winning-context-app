@@ -220,6 +220,36 @@ diagram extraction would be assuming something the field has measured as false.
 
 ---
 
+### <a id="diagram-extraction"></a>Automatic diagram extraction and result fusion
+
+Full brief: [diagram-extraction-fusion.md](diagram-extraction-fusion.md).
+
+**Taken — the fusion shape and the grounding rule.** TRACE (EMNLP 2026) requires every
+triplet to anchor to a *detected* arrowhead; swapping the detector moves F1 under 1 point
+while changing the paradigm moves it ~23, which is the evidence that anchoring, not the
+model, is what carries accuracy. ROVER-style multi-configuration voting on OCR characters
+(44% CER reduction on the paper's own streams) justifies voting at the character level
+before voting on labels. FlowExtract's two geometric signals and the BPMN-VLM result —
+where injecting OCR into a strong VLM prompt *lowered* name F1 0.807 → 0.775 — justify
+weighted, margin-gated voting instead of concatenation.
+
+**Rejected.** Trusting a single chain (Docling, Marker, Unstructured, PP-StructureV3 are
+sequential and later stages trust earlier ones: no cross-check exists to report). Chart-to-table
+models (DePlot, MatCha, PP-Chart2Table) because they answer a question, not "what is drawn
+here", and PaddleOCR's own docs advise against keypoint chart pipelines. DocLayout-YOLO is
+AGPL-3.0 and LayoutLMv3's weights are CC-BY-NC-SA-4.0 — both unacceptable as a default
+dependency (ADR-0013). Azure Document Intelligence returns figures as regions only, so it adds
+no diagram semantics. A VLM as the primary reader is rejected on the measured numbers
+already cited above (ADR-0012 stage 3).
+
+**Licence follow-up:** the OCR/geometry stack was measured separately in
+[licence-boundary.md](licence-boundary.md) — `tesserocr` vendors GPL-2.0-or-later jbigkit and
+maps it at import, so the default stack is `rapidocr` + `onnxruntime` + headless OpenCV.
+
+**Not verifiable.** A project named "DagDiagram" does not exist (GitHub search: 0 results); it
+was replaced by TRACE/FlowExtract/TextFlow. Microsoft ships figure-region detection, not
+diagram semantics.
+
 ## <a id="prompt-injection"></a>Prompt injection and RAG security
 
 - OWASP — [*LLM Prompt Injection Prevention Cheat Sheet*](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html)

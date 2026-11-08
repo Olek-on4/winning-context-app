@@ -12,6 +12,7 @@ from datetime import date
 from enum import StrEnum
 
 from models.claim import ClaimRecord, Modality, SourceType
+from settings import FRESHNESS_FLOOR, FRESHNESS_HALF_LIFE_DAYS, TIE_MARGIN
 
 
 class Status(StrEnum):
@@ -23,11 +24,8 @@ class Status(StrEnum):
     UNKNOWN = "UNKNOWN"
 
 
-TIE_MARGIN = 0.15
 # Contradiction-relative freshness (ported from ADR-0007): age only counts against a
 # claim when something newer contradicts it. An old fact nobody disputes stays at 1.0.
-FRESHNESS_HALF_LIFE_DAYS = 180
-FRESHNESS_FLOOR = 0.25
 # Intent is never compared against facts: it is reported as intent.
 INTENT_MODALITIES = {Modality.PROPOSAL, Modality.PLAN}
 

@@ -3,7 +3,7 @@
 The 15-point area: *"how the solution ingests and extracts knowledge… including how
 the extraction is automated and the ability to handle different formats."*
 
-## One envelope, six pipelines — four ship
+## One envelope, six pipelines — five ship
 
 Every pipeline emits the same record. That single constraint is what makes four
 developers able to work in parallel without meetings, and what makes a seventh source
@@ -52,6 +52,9 @@ flowchart LR
 ```
 
 Solid edges ship; dashed pipelines are documented forward work ([ADR-0006](adr/0006-scope-of-the-build.md)).
+Shipped today: `ConfigPipeline` (`json.config-map`, `deploy.config`), `ApiSpecPipeline`
+(`api.spec`), `SchemaPipeline` (`sql.alter`), `NarrativePipeline` (`markdown.status`).
+The router is `ingest/registry.py`; a new type is one `Pipeline` plus one `register()` call.
 
 Routing is by path convention first, extension second, magic bytes last. Path first
 because in this corpus the path *is* semantics: `api-specs/history/` and `archive/`
@@ -112,19 +115,24 @@ separates `archive/` from the active system and resolves trap T5 without a model
 
 ### ApiSpecPipeline — `api-specs/**`, `*.graphql`
 
-OpenAPI JSON → `Endpoint` nodes (method, path, params, response schema), versions,
-and `IMPLEMENTS` links to the handlers found by CodePipeline. GraphQL SDL →
-types and fields. Any file under `history/` is tagged `DEPRECATED` at extraction
-time by path rule, and a `SUPERSEDES` edge is written from the current spec to it.
+Built, deterministically. OpenAPI JSON → one `EXPOSES` claim per `method + path` in the
+`paths` object; GraphQL SDL → one `EXPOSES` claim per field, named `Type.field`. The
+subject is the service the filename names. A spec under `history/` or `archive/` is a
+superseded contract by path rule, so it carries `SourceType.HISTORICAL` and authority
+0.20 — that is trap T3 resolved mechanically, and it is why G3 passes without a model.
 
-This pipeline produces the **gap detector for free**: an endpoint in a spec with no
-matching handler is a documented-but-unimplemented gap; a handler with no spec entry
-is an undocumented endpoint. Both are exactly the "fills the gaps" ask in the brief,
-and both fall out of set difference rather than inference.
+Not built, and not claimed by this document any more: `Endpoint` nodes, `IMPLEMENTS`
+links to handlers, `SUPERSEDES` edges between spec versions, and the endpoint/handler
+**gap detector**. All four need the code pipeline that [ADR-0006](adr/0006-scope-of-the-build.md)
+cut; see [ADR-0009](adr/0009-shipped-surface.md) for the record.
 
 ### SchemaPipeline — `migrations/*.sql`, `*.sql`
 
-`sqlglot` AST, not regex, because the interesting statements are `ALTER`s. Produces
+`ALTER TABLE` statements matched by two anchored regexes (`RENAME COLUMN`, `ADD COLUMN`),
+because those are the statements that carry time: a rename closes the old column and
+opens the new one. A full SQL parser (for example `sqlglot`) is the upgrade when the
+corpus grows DDL beyond that shape — it would add a dependency and a syntax tree for
+no fact the current corpus contains. Produces
 `Table`/`Column` nodes **with migration-ordered validity**:
 `002-account-tiers.sql` closes `users.status` and opens `users.account_status` and
 `users.customer_tier`. That is trap T2 resolved mechanically, with a confidence of
@@ -161,7 +169,19 @@ subjects, and roughly every claim it invents fails the verbatim-excerpt check. W
 expect to discard a meaningful fraction of generated claims and consider that the
 system working, not failing.
 
-### DiagramPipeline — `diagrams/*.png`
+### DiagramPipeline — `diagrams/*.png` (implemented: `ingest/diagram.py`)
+
+**This pipeline is built.** It runs automatically over every `.png`/`.gif`, is ungated
+(the stack carries no strong copyleft), and emits `HAS_DECLARED_TYPE` claims whose subject
+is the table-and-column the line belongs to (`orders.total`), found by the frame the line
+sits in. Each claim cites a **region**; each picture also becomes one chunk so its text is
+searchable. Measured on the corpus: `orders.total → REAL (USD)` cited at
+`customer-orders-erd.png` region `[628, 336, 193, 26]`, and the same picture yields the same
+claims on a repeat run.
+
+What is **not** built: connector geometry. Probes measured 0-2 recoverable edges of the ~8 a
+human sees per diagram, so no edge is emitted rather than guessing (ADR-0012 states the
+method to improve: skeleton tracing, arrowheads, deduplicated frames).
 
 Six images. The corpus's own README says their content matters: *"A drawn connection
 can be useful evidence without proving an executable call path."*
@@ -181,15 +201,42 @@ frontier VLMs fall below 60% on structured engineering diagrams
 - A diagram claim is promoted to `VALID` **only when corroborated** by a non-diagram
   source. Alone, it stays `DISPUTED` and is reported as "the September diagram shows
   this; nothing else does" — which is itself a useful finding.
-- Six images is small enough that each extraction is **human-reviewed once** and
-  committed as a fixture under `data/fixtures/diagrams/*.json` with
-  `extractor: "vlm+human"`. This is honest about our model access, costs twenty
-  minutes, and is exactly what a real deployment would do at the sampling rate the
-  accuracy numbers justify.
+- A human is **not** in the loop for the normal case. Extraction is automatic and must
+  stay automatic at a thousand images: the reviewed-fixture route above is a degradation
+  path for a handful of hard images, offered as an interactive mode whose input is a
+  reviewed `data/fixtures/diagrams/*.json` with `extractor: "human+assisted"`, and
+  refused above a configured image count (`settings.HUMAN_ASSIST_MAX_FILES`) so it can
+  never become the process.
+- One engine is not trusted to be right. Independent signals — OCR text with positions,
+  box detection, connector geometry, line style, reading order — are fused by weight and
+  a disagreement rate is reported per diagram (ADR-0012). Low confidence is a result,
+  not a reason to ask a person.
 
 The diagram value is not the nodes — code gives better nodes. It is `architecture-january`
 vs `architecture-september`: **a visible delta with dates on it**, which is a strong
 temporal signal for the resolver and the cleanest demo of the whole thesis.
+
+### Opt-in capabilities — the reusable flow
+
+A pipeline may need something the default install deliberately does not carry: a library
+whose licence is stronger than MPL-2.0, a multi-gigabyte model, a native binary. The rule
+is one mechanism, used by every such capability (`ingest/optin.py`):
+
+1. **The pipeline declares it.** `opt_in = OptIn(name, licence, why, modules, extra)` —
+   the licence of the copyleft part named exactly, the importing module kept in its own
+   file and its own `pyproject` extra, imported lazily inside `extract()`.
+2. **Discovery stays honest.** The walker yields files a gated pipeline claims even when
+   they are not text (`iter_files(claimable=...)`), so the count shown to the operator is
+   the real one rather than zero.
+3. **Consent is asked once, before work.** `N file(s) would be extracted`, the licence,
+   the cost, then `enable <name>? [y/N]`. `--accept-opt-in NAME` answers for an
+   unattended run; `--decline-opt-in NAME` pins a module off even when installed and
+   always wins; no TTY and no flag means skip-and-report, never silent agreement.
+4. **Declining changes nothing else.** Output is byte-identical to a build where the
+   module was never installed, and every skipped file is named.
+
+Adding a capability means adding an `OptIn` and a module — no edits to the walker, the
+lint, or this flow.
 
 ## Automation
 

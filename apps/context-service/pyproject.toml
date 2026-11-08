@@ -12,6 +12,22 @@ dependencies = [
   "httpx>=0.27",
 ]
 
+# Optional capabilities, never installed with the default. `diagram` is the zero-GPL
+# reader+geometry set (LGPL-2.1 only, measured: docs/research/licence-boundary.md);
+# `diagram-tesseract` carries GPL-2.0-or-later jbigkit and is gated by ingest/optin.py.
+[project.optional-dependencies]
+diagram = [
+  "rapidocr>=3.10,<4",
+  "onnxruntime>=1.20",
+  "opencv-python-headless>=4.10",
+  "numpy>=2.0",
+  "pillow>=11",
+  "networkx>=3.4",
+]
+diagram-tesseract = [
+  "tesserocr>=2.12",
+]
+
 [dependency-groups]
 dev = [
   "pytest>=8.3",

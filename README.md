@@ -1,242 +1,181 @@
-# Ety&T — Etymology & Translation
+<div align="center">
+  <img src="etynt_gui/src/assets/northstar-bookshelf.png" width="96" alt="Ety&amp;T">
+</div>
 
-Built for the AT&T Context Service hackathon. **Ety&T** is an evidence-backed, time-aware
-Context Service over the [Northstar Equipment](https://github.com/arkik7/att-hackathon-task)
-corpus (twelve apps, docs, wiki, meeting notes, incidents, API specs, diagrams).
+# Ety&T
 
-The corpus lives in `vendor/att-hackathon-task` as a git submodule and is the only
-source of input data. Everything in this repository is our own code.
+An evidence-backed context service that builds relationships of significant terms
+with validity, source and confidence. Uses small local models for embedding and semantic lookup.
 
-## The idea in one paragraph
+[![license](https://img.shields.io/badge/license-MPL--2.0-blue?style=flat-square)](LICENSE)
+[![python](https://img.shields.io/badge/python-3.12-blue?style=flat-square)](apps/context-service/pyproject.toml)
+[![tests](https://img.shields.io/badge/tests-228%20passed-brightgreen?style=flat-square)](apps/context-service/tests)
+[![ruff](https://img.shields.io/badge/ruff-passing-brightgreen?style=flat-square)](apps/context-service/pyproject.toml)
+[![stack](https://img.shields.io/badge/stack-Neo4j%205%20%2B%20Ollama-bluegrey?style=flat-square)](infra/neo4j/compose.yaml)
+[![status](https://img.shields.io/badge/status-demo--ready-orange?style=flat-square)](#quickstart)
 
-In this corpus the *most relevant* passage is usually the *stale* one — a wiki page
-documents a Redis cache that an ADR removed four months later, and a vector search
-ranks the wiki page first. So the unit of knowledge here is not a chunk and not a
-triple: it is a **claim**, carrying provenance to an exact line range, a validity
-interval, a status (`VALID` · `DEPRECATED` · `PLANNED` · `PROPOSED` · `DISPUTED`) and
-a confidence. Entities and relationships are derived from claims by a deterministic
-resolver, never asserted by an extractor. Questions are answered by a validated query
-plan compiled to parameterised Cypher — the model never writes a query.
+Running today: extraction, graph load, hybrid retrieval, REST, MCP over stdio and a web
+console, using `vendor/att-hackathon-task` as corpus.
 
-## Status
+## Why this exists
 
-**The spine runs.** Four pipelines, six intents, three MCP tools, seven corpus traps
-answered end to end with citations; `make check` is the gate. Design record:
-**[docs/README.md](docs/README.md)**.
+Regular vector search answers "which text block looks like the question", and here the winner is
+often the stale chunk. Relevance is not truth, and a chunk carries no date, no status and no
+way to check itself. So the unit of knowledge is a claim: subject, predicate, object,
+validity interval, status, confidence, and citations down to `path:line` or image
+region.
 
-- [docs/02-architecture.md](docs/02-architecture.md) — the system end to end
-- [docs/03-ontology.md](docs/03-ontology.md) — how knowledge is represented
-- [docs/04-temporal-model.md](docs/04-temporal-model.md) — how validity is decided
-- [docs/08-delivery-plan.md](docs/08-delivery-plan.md) — four developers, five hours
-- [docs/10-workstreams.md](docs/10-workstreams.md) — who builds what
-- [docs/local-model.md](docs/local-model.md) — running the embedding model on the GPU
-- [docs/plan-review.html](docs/plan-review.html) — visual review of the plan: pillars, mechanics, findings
-- [docs/adr/](docs/adr/) — decisions and their rejected alternatives
+## Use cases
 
-## Who builds what
+- "Does inventory-service still use a Redis cache?" returns `VALID ... sqlite` next to
+  `DEPRECATED ... redis`, citing the ADR and the release that removed it, not the wiki
+  sentence that merely matches the wording.
+- Before a change: which claims name the module as a dependency, and which of those are
+  still valid at `as_of`.
+- Contradiction triage: two sources disagree, both claims are kept, and the pair is
+  returned as a conflict with evidence on each side.
+- Questions the corpus cannot answer: the envelope says so, sets `degraded: true` and
+  lists the gaps instead of writing a confident paragraph.
 
-Four lanes, one owner each, four frozen contracts between them
-([detail](docs/10-workstreams.md)):
+## What it contains
 
-| Lane | Owns | Hands over |
+```mermaid
+flowchart LR
+    C["corpus submodule<br/>read-only"] --> X["extractors<br/>narrative, config,<br/>api-spec, sql, diagram"]
+    X --> G["gates<br/>schema, span, ontology"]
+    G --> K[("Neo4j<br/>claims + spans<br/>+ vector + BM25")]
+    K --> P["planner<br/>LLM emits a CQP"]
+    P --> Q["compiler<br/>CQP to parameterised<br/>Cypher"]
+    Q --> H["hybrid seed<br/>kNN + BM25, fused by RRF"]
+    H --> R["resolver<br/>time filter, conflicts"]
+    H --> K
+    R --> E["envelope<br/>answer, claims, evidence, gaps"]
+    E --> S["REST / MCP / web UI"]
+```
+
+Pipelines, one per source type:
+
+| Source | Extracts | Shipped |
 |---|---|---|
-| **Extraction** | `ingest/` | `claims.jsonl` passing the schema, span and ontology gates |
-| **Core** | `graph/`, `infra/neo4j/` | a resolved graph where status and time are decided |
-| **Search** | `retrieval/` | question → validated CQP → parameterised Cypher → answer envelope |
-| **MCP / API** | `api/`, `mcp/`, `tests/golden/` | REST + three MCP tools, and the seven-trap golden set |
+| `docs/adr/`, `releases/`, `incidents/`, `issues/` | narrative claims carrying a status and dates | yes |
+| `wiki/`, `docs/`, `meeting-notes/` | prose claims from the header pass | yes |
+| `compose.yaml`, `package.json`, `Dockerfile`, `CODEOWNERS` | services, ports, env, dependencies, ownership | yes |
+| `api-specs/`, `*.graphql` | one `EXPOSES` claim per method and path, or per field | yes |
+| `migrations/*.sql` | `ADD COLUMN` and `RENAME COLUMN` as claims with validity | yes |
+| `diagrams/*.png` | `HAS_DECLARED_TYPE` claims via OCR, cited by region | boxes, labels, no edges |
+| `*.ts`, `*.py`, `*.java` | code symbols, handlers, endpoint links | no ([ADR-0006](docs/adr/0006-scope-of-the-build.md)) |
 
-Only two waits exist (extraction→core, core→search) and both consume a file, not a
-running service.
+Surface:
 
-## Use it
-
-```sh
-make docker-up          # neo4j + ollama + app, all healthy
-make docker-demo        # pull model, extract, load, index -- then it prints a curl
-make ui                 # build the web UI, then serve page + API on :8000
-make test               # whole suite, no containers needed except the golden traps
-make e2e                # proves the containerised stack answers REST and MCP
-```
-
-Ask it things over REST:
-
-```sh
-curl -s localhost:8000/v1/query -H 'content-type: application/json' \
-  -d '{"question":"Does inventory-service still use a Redis cache?"}'
-```
-
-Every claim comes back with `status`, an interval and citations as
-`{path, lines, hash}`. The text behind a citation is served by
-`GET /v1/span?path=…&start=…&end=…`, never stored twice.
-
-### Add your own data
-
-A "source" is any directory. Point the extractor at it and it is indexed and
-discoverable immediately:
-
-```sh
-cd apps/context-service
-uv run python -m cli extract --source /path/to/your/repo --source ../../vendor/att-hackathon-task
-uv run python -m cli load /path/to/claims.jsonl        # EXTRACTED_PATH controls the file
-uv run python -m cli index --source /path/to/your/repo --source ../../vendor/att-hackathon-task
-```
-
-The **server** must be told the same roots, or citations from the new tree fail
-verification at query time. `SOURCES` is colon-separated and applies to `serve` and `mcp`:
-
-```sh
-SOURCES=/path/to/your/repo:$PWD/../../vendor/att-hackathon-task \
-  uv run python -m cli serve
-```
-
-Worked example, measured: a three-file directory (`conf/ports.json`, `schema/003-invoices.sql`,
-`notes/billing.md`, git-initialised) added as a second root produced 28 claims —
-`billing-api LISTENS_ON 9100`, `invoices NOT HAS_COLUMN state` / `ASSERTS invoice_status` —
-and both answered over HTTP with citations that resolve through `/v1/span`.
-
-What happens automatically: every text file is chunked and embedded for search; `.sql`
-`ALTER TABLE` statements become `HAS_COLUMN` claims (renames emit a negation);
-`compose.yaml`, `package.json` and `CODEOWNERS` become `DEFINED_IN` / `DEPENDS_ON` /
-`OWNS`; markdown `Date:`/`Status:`/`Owner:` headers become document facts. Claims carry
-a pointer and a file hash, so a citation can always be re-read from the tree.
-
-A new *data type* is one class plus `register()` — see
-`apps/context-service/ingest/registry.py`; nothing else changes, and
-`tests/test_agnostic.py` proves it on a directory that shares no layout with the corpus.
-
-### Test that it finds things
-
-```sh
-uv run pytest tests/golden -v        # seven traps: answer + status + citation
-uv run pytest tests/test_vectors.py  # every chunk has a vector, paraphrase retrieves
-make rehearse                        # cold start: wipe, rebuild, serve, seven steps
-make e2e                             # same, through the container stack
-```
-
-The honest test is the negative one: ask "can I join employees to customers by email?"
-It must answer **no** and show `SIMILAR_NAME_TO`, not an invented join.
-
-## Demo script (5 minutes)
-
-**One port, one server.** `make ui` and the container both want `:8000`; pick a path.
-
-```sh
-git status -sb                       # clean, or commit+push first
-make docker-down                     # if the container stack is up
-make ui                              # builds if stale, then page + API on :8000
-curl -s localhost:8000/ | head -c 40 # must print <!doctype html>
-```
-
-Container path instead: `make docker-up && make docker-demo`, then `make ui-build`
-(compose mounts `etynt_gui/dist`); never both at once.
-
-**1. The claim and its evidence.** Ask *"Does inventory-service still use a Redis cache?"*.
-Current shows `READS_FROM sqlite` and `NOT READS_FROM redis`; Not valid shows the wiki claim
-as `DEPRECATED` with the reason. Click any citation — the ADR lines appear verbatim.
-
-**2. Time changes the answer.** Set `as of 2026-03-01`: Redis is valid, SQLite is absent.
-
-**3. API and MCP with endpoint, parameters and raw result.** Sidebar → **API & MCP**.
-The tool cards come from `GET /v1/mcp`, and the form fields are built from each tool's
-declared parameters — no captions. Pick one, press *Run tool*: the request line
-(`POST /v1/mcp/context_search` plus exact params) sits beside the raw JSON. Under it every
-citation is a button; clicking reads the bytes from `/v1/span`. Bottom: the HTTP trace of
-every call the page made, including failures (status 0).
-
-**4. MCP from the agent.** The stdio server is registered in `~/.omp/agent/mcp.json` as
-`etyt-context`. Servers connect at session start, so reload once:
-
-```
-/reload        then  /mcp        # etyt-context with four tools
-```
-
-Ask it for `context_search` on the Redis question, then `resolve_span` on a returned
-citation. Three-way match — tool bytes, file bytes, corpus commit:
-
-```sh
-sed -n '6,6p' vendor/att-hackathon-task/docs/adr/003-stock-cache.md
-git -C vendor/att-hackathon-task log -1 --format='%H' -- docs/adr/003-stock-cache.md
-```
-
-Terminal-only check of the same server, no agent needed:
-
-```sh
-cd apps/context-service && uv run python ../../scripts/mcp_probe.py
-```
-## Layout
-
-```
-.
-├── apps/context-service/     our implementation (Python 3.12)
-├── docs/                     design, ADRs, research
-├── data/fixtures/            small, reviewed, committed
-├── tests/golden/             the seven corpus trap cases
-├── vendor/att-hackathon-task corpus submodule, read-only
-└── LICENSE                   MPL-2.0
-```
-
-## Clone
-
-The corpus is required for every task that touches data:
-
-```sh
-git clone --recurse-submodules <repo-url>
-# existing checkout:
-git submodule update --init --recursive
-```
-
-Refresh the corpus to the pinned commit after a pull:
-
-```sh
-git submodule update --recursive
-```
-
-## Run it
-
-Two paths, one API at `http://127.0.0.1:8000`.
-
-**Host** — Python 3.12 + `uv`, Neo4j in Docker, Ollama on the host:
-
-```sh
-make up      # start neo4j
-make demo    # up extract load index, then print the query to run
-make serve   # REST on :8000
-```
-
-**Containers** — Neo4j, Ollama and the service all in Docker, corpus mounted read-only:
-
-```sh
-make docker-up     # build + start etyt-neo4j, etyt-ollama, etyt-app
-make docker-demo   # pull the model, then the same pipeline inside etyt-app
-```
-
-| Container | Role |
+| Endpoint or tool | Provides |
 |---|---|
-| `etyt-neo4j` | `neo4j:5-community`; browser on `http://127.0.0.1:7474`, auth `neo4j` / `etyt-context` |
-| `etyt-ollama` | `ollama/ollama` on `http://127.0.0.1:11435` (11434 belongs to a host-side Ollama) |
-| `etyt-app` | the Context Service; REST + MCP; `http://127.0.0.1:8000` |
+| `POST /v1/query` | the answer envelope for one question; `as_of`, `status_in`, `token_budget`, `effort`, `detail` |
+| `POST /v1/plan` | the Context Query Plan alone, no execution |
+| `GET /v1/span` | the cited lines as `text/plain`; add `region=x,y,w,h` for a PNG crop |
+| `GET /v1/mcp` | the four tool specs with real parameter schemas |
+| `POST /v1/mcp/<tool>` | `{tool, params, result}` from the same functions the stdio server registers |
+| `context_search` | what is true about a component now, or as of a date, with status and citations |
+| `context_explain_relationship` | how two things connect: linked claims one hop away, with evidence |
+| `context_risks` | what is stale, disputed or contradictory around a subject |
+| `resolve_span` | the exact lines a citation points at, or an image region as a PNG |
 
-The model lives in a volume, so it is pulled once — `make docker-demo` does it, and
-`make docker-index` re-indexes inside `etyt-app` after that. Inference is CPU-only on this
-host: there is no nvidia runtime, so the GPU block in the compose file stays commented out.
-Full rehearsal script: [docs/demo.md](docs/demo.md).
+`effort` runs 0-4 and sets how much of the graph is traversed and how much evidence is
+returned; `detail` is `low`, `medium` or `high` and sets the envelope size. Defaults:
+REST answers at `medium`, MCP tools at `low`.
 
-## Corpus facts
+## Quickstart
 
-- Source of truth: `vendor/att-hackathon-task` (MIT licensed, fictional organization),
-  pinned at `612cc0b`. 373 tracked files, 3.3 MB.
-- Main material: TypeScript/Python/Java apps, `docs/`, `wiki/`, `meeting-notes/`,
-  `issues/`, `incidents/`, `releases/`, `api-specs/`, `diagrams/`.
-- It contains deliberate contradictions, superseded documents and false joins.
-  The catalogue of them is [docs/01-corpus-survey.md](docs/01-corpus-survey.md) and it
-  doubles as our test suite.
-- Running the upstream apps is optional; source inspection is sufficient. Derived
-  stores (parsed corpus, embeddings, indexes) must not be committed.
+```sh
+git clone --recurse-submodules <repo-url> winning-context-app
+cd winning-context-app
+make ui-build      # etynt_gui/dist is not tracked, and the image needs it
+make docker-up     # neo4j + ollama + app, returning only once all three are healthy
+make docker-demo   # pull both models, then extract, load and index in the app container
+```
 
-## Contributing
+The console and the API are then on `http://127.0.0.1:8000`.
 
-Read [AGENTS.md](AGENTS.md) first. It is binding for humans and agents alike.
+
+## Point your agent at it
+
+```json
+{
+  "mcpServers": {
+    "etyt-context": {
+      "command": "uv",
+      "args": ["--directory", "/path/to/winning-context-app/apps/context-service",
+               "run", "python", "-m", "cli", "mcp"],
+      "env": {
+        "NEO4J_URI": "bolt://localhost:7687",
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASSWORD": "etyt-context"
+      }
+    }
+  }
+}
+```
+
+Start with `context_search` to get ranked claims, then call `resolve_span` on a citation
+before acting on it.
+
+## Develop
+
+| Target | Does |
+|---|---|
+| `make up` | start Neo4j, Ollama and the app, waiting for healthchecks |
+| `make down` | stop the containers |
+| `make docker-up` | build and start the container stack, returning when healthy |
+| `make docker-down` | stop the container stack |
+| `make models` | pull `nomic-embed-text` and `llama3.2` into the ollama container |
+| `make docker-index` | chunk and embed the corpus inside the app container |
+| `make docker-demo` | `docker-up` plus `models`, then extract, load, index in the container |
+| `make extract` | deterministic claims to `data/local/claims-extracted.jsonl` |
+| `make index` | chunk the corpus, build vector, BM25 and vocabulary layers |
+| `make load` | fixtures and extracted claims into the graph |
+| `make serve` | REST on `:8000`, API only |
+| `make ui-build` | `npm ci` then `vite build` into `etynt_gui/dist` |
+| `make ui` | rebuild `etynt_gui/dist` when stale, then serve page and API on `:8000` |
+| `make mcp` | MCP over stdio |
+| `make demo` | up, extract, load, index, then print the query to run |
+| `make test` | `uv run pytest -q` |
+| `make lint` | `uv run ruff check .` |
+| `make fmt` | `uv run ruff format .` |
+| `make e2e` | prove the containerised stack answers REST and MCP |
+| `make rehearse` | the demo rehearsal script |
+| `make check` | lint plus test, the commit gate |
+| `make gpu` | is the model actually on the card |
+| `make install-hooks` | point git at `.githooks` |
+| `make issues` | file the work queue as GitHub issues |
+
+`cd apps/context-service && uv run pytest -q` passes 228 tests with no model and no
+network; the two container-contract tests skip unless the Docker stack is up.
+
+| Path | Holds |
+|---|---|
+| `apps/context-service` | Python 3.12 service: `ingest/`, `graph/`, `retrieval/`, `api/`, `mcp_server/`, `models/` |
+| `etynt_gui` | React 19 and Vite web console, built to `etynt_gui/dist` |
+| `apps/context-service/tests/golden` | the seven corpus traps, asserted against a live graph |
+| `docs` | the design record `00` to `11`, and `adr/` |
+| `data/fixtures` | reviewed claims, loaded alongside extraction |
+| `data/local` | extraction output, gitignored |
+| `indexes` | gitignored derived stores; the shipped index lives in Neo4j |
+| `vendor/att-hackathon-task` | the corpus submodule, read-only, MIT |
+
+## Documentation
+
+- [docs/README.md](docs/README.md) - the index of the design record
+- [02 - architecture](docs/02-architecture.md) - the system end to end
+- [03 - ontology](docs/03-ontology.md) - what a claim is, and the three planes
+- [04 - temporal model](docs/04-temporal-model.md) - how valid and deprecated are decided
+- [07 - API and MCP](docs/07-api-and-mcp.md) - the transport surface
+- [docs/adr/](docs/adr/) - decisions with their alternatives and trade-offs
 
 ## License
 
-MPL-2.0. See `LICENSE`. The corpus submodule keeps its own MIT license.
+Mozilla Public License 2.0; see [LICENSE](LICENSE). The vendored corpus in
+`vendor/att-hackathon-task` is read-only and stays under its authors' MIT license.
+
+## Disclaimer
+
+This project was done as a part of AT&T hackathon 2026.
+This project was made by AI agents with assistance of a human.

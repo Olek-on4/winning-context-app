@@ -185,3 +185,174 @@ Seven minutes, rehearsed twice, in this order — the first two minutes carry th
 | Envelope drift between A and B | Medium | One pydantic model, imported by both. Gate 1 fails loudly at the boundary. |
 | Scope creep into column 3 | **High** | Checkpoint 2 is a hard stop. Column 3 is a *slide*, not a branch. |
 | Demo machine has no Neo4j / no Ollama | Low | Rehearse on the actual demo machine before 04:15, not on a laptop that works. |
+
+## Implementation plan — diagram evidence (ADR-0012, ADR-0013)
+
+**Status 2026-11-08: phases 3a, 3b and the text half of 3c are built and verified.**
+`orders.total HAS_DECLARED_TYPE REAL (USD)` is answered from
+`customer-orders-erd.png` region `[628, 336, 193, 26]`; the 284 pre-existing claim ids are
+untouched; a version bump removed 112 stale claims. **Open:** connector geometry (0-2 of ~8
+edges measured), the region-aware `/v1/span` and MCP `resolve_span`, and the GUI rectangle.
+
+Phases 0-2 are done: the owner approved the stack, three researches landed
+(`research/diagram-extraction-fusion.md`, `research/licence-boundary.md`, the six-image
+inventory), and two reviewers attacked the plan. What follows is the build, phase by phase.
+**Each phase states its tests first**; a phase is done when its gate shows output, not when its
+code compiles. Phases 3a and 3b are independent and run in parallel; 3c needs both.
+
+### Corrections measured against the live store before any code
+
+An independent review ran the plan's own Cypher against `etyt-neo4j-1` and found that the first
+version of this phase could not land a single region claim. These are now part of the contract:
+
+1. **A nullable merge aborts the load.** `MERGE … {region: null}` raises *Cannot merge the following
+   node because of null property value*; all 311 claims are region-less, so one null kills the
+   `UNWIND`. Two branches: the existing 3-property identity for line spans, a 7-property identity
+   (`path, start_line, end_line, region_x, region_y, region_w, region_h`) for regions.
+2. **A nested map is not a property.** `SET n.region = {x,y,w,h}` is rejected; store four flat
+   integers. `schema.cypher` gains the matching assertion.
+3. **Gate 2 drops region claims.** `ingest/gates.py:70-118` requires the excerpt verbatim in a
+   UTF-8 read; a PNG cannot satisfy it. A region span carries `excerpt = None`, and gate 2's region
+   leg is *file hash + bounds*.
+4. **Bounds need a decoder.** A PNG's `IHDR` gives width and height in bytes 16-24; `sources.py`
+   reads those 24 bytes, stdlib only. Out-of-bounds raises, never clamps.
+5. **Two dedupe keys collapse regions.** `retrieval/service.py:355` and `:484` key on
+   `(path, start, end)`; both gain the region.
+6. **Sorted output, not insertion order.** `cli.py:200-210` writes insertion order, so
+   "byte-identical" is already true and proves nothing; sort before writing and assert sorted.
+7. **Out of 3a on purpose:** the walker's `claimable` only honours gated pipelines
+   (`ingest/registry.py:419-421`), `graph/chunks.py` never chunks a PNG, `settings.PREDICATES` has
+   no diagram predicate, and `/v1/span` + MCP `resolve_span` are line-only. Those are phase 3c.
+
+### Phase 3a — the citation contract (no new image dependency)
+
+Files: `models/claim.py`, `graph/loader.py`, `graph/schema.cypher`, `retrieval/cqp.py`,
+`retrieval/service.py`, `retrieval/hybrid.py` (the passage shape at `_chunk`), `ingest/gates.py`,
+`etynt_gui/src/App.tsx`
+(citations are keyed `${path}:${lines[0]}`, which collides for two regions of one image, and the
+drawer renders text where an image needs a rectangle), `docs/06`, `docs/07`.
+
+Tests first, each anchored in a use case:
+
+| test | use case |
+|---|---|
+| `Region(1,2,10,20)` on a claim changes `claim_id`; the same claim without a region keeps its exact id | the 284 extracted + 27 fixture claims must not churn |
+| two claims, same triple, same image, different regions → two `Span` nodes and two citations | one diagram can state one fact twice at two places |
+| a citation with a region survives `cqp._citations` → `service._verify` → envelope | region is not silently dropped on the query path |
+| a region-only passage (`start_line == end_line`) is not skipped by the two-line filter | the `if len(lines) != 2: continue` defect |
+| a region outside the image bounds is rejected, not clamped | a wrong rectangle must fail loudly |
+| a region whose rect is unchanged but whose file bytes changed is reported as drift | the hash leg must run before the bounds leg |
+| two citations on the same image produce distinct GUI keys | `${path}:${lines[0]}` collides when both spans start at line 1 |
+| a passage returned by hybrid search carries its region into the envelope | the drawer cannot draw what the passage drops |
+
+Gate: `pytest` green, `make` targets unchanged, no claim in `claims-extracted.jsonl` gains a
+region. No new dependency; this phase lands on its own.
+
+### Phase 3b — versioned extraction (no dependency)
+
+Files: `models/claim.py`, every pipeline in `ingest/registry.py`, `graph/loader.py`, `cli.py`,
+`settings.py`.
+
+Tests first:
+
+| test | use case |
+|---|---|
+| a pipeline sets a non-default `extractor_version` derived from its own inputs | today every claim says `"1"` |
+| loading a claim whose version differs from the running extractor deletes the stale one instead of adding a second | a version bump must not duplicate |
+| two runs with the same inputs produce byte-identical sorted claim JSON | determinism is testable, not asserted |
+
+Gate: re-running `extract` twice yields identical files; changing a pipeline's version removes
+exactly its old claims from the graph and adds the new ones once.
+
+### Phase 3c — the reader (needs 3a, 3b, and the approved extra)
+
+Files: `ingest/diagram.py` (ungated: `rapidocr` + `onnxruntime` + headless OpenCV + `networkx`),
+`ingest/diagram_tesseract.py` (gated: `OptIn("diagram-tesseract", "GPL-2.0-or-later ...")`,
+lazy import inside `extract`), `settings.py` (fusion weights, eval thresholds, and the
+`PREDICATES` entries for `DIAGRAM_NODE` / `DIAGRAM_EDGE` with their allowed subject/object kinds —
+without them gate 3 drops every diagram claim and a clean `pytest` hides it), `ingest/ontology.py`
+(the same allowlist), `sources.py` (`claimable` must honour **any** pipeline that matches, not only
+`opt_in` ones: the default reader is ungated by design, and gating discovery only to gated readers is
+the exact defect ADR-0012 exists to fix), `graph/chunks.py` (a PNG never becomes a `Chunk` today —
+it opens every file as UTF-8; diagram text needs a chunk whose citation carries the region),
+`api/app.py` + `mcp_server/server.py` (`/v1/span` and `resolve_span` are `(path, start, end) -> str`;
+a region must return image bytes with an image media type, never a text decode of a PNG),
+`etynt_gui/src/api.ts`, `App.tsx`, `DeveloperView.tsx` (type, key and URL are line-only), `tests/golden/`.
+
+Tests first, in the order they can fail cheaply:
+
+| test | use case |
+|---|---|
+| a hand-built fixture PNG (two boxes, one arrow, one label) yields one node, one edge, the label | the geometry contract, with no real file |
+| a dashed arrow yields `PROPOSED`, a solid one `VALID`, an arrowless line yields no direction | status must match what the drawing says |
+| an edge whose arrowhead is missing is demoted and flagged, never `FACT` | TRACE's grounding rule |
+| the same PNG extracted twice is byte-identical | determinism |
+| declining the gated reader changes nothing in the output | ADR-0013's promise, on a real image |
+| the ERD question returns `REAL (USD)` from a region citation | the only question prose cannot answer |
+| `people-finance-process` answers `Friday 16:00` from a region | second pixel-only fact |
+| the seven self-checks produce numbers on a deliberately corrupted copy (one label blurred) | a bad read is visible without a human |
+| one end-to-end corpus run: `extract` → `index` → query a PNG-only fact | proves no gate, chunker or envelope drops the claim on the way |
+| a diagram claim's predicate survives ontology validation | gate 3 silently empties a pipeline that invents predicates |
+| `/v1/span` for a region returns `image/png` bytes of that rectangle | a citation must resolve to what was read, not a text decode |
+
+**Measured before writing the extractor** (throwaway probe, default reader, real files):
+
+| diagram | hollow boxes found | connector segments | segments joining two *distinct* boxes |
+|---|---|---|---|
+| `customer-orders-erd` | 3 (the three tables) | 31 | **0** |
+| `architecture-january` | 7 | 71 | 3 (2 distinct pairs) |
+| `checkout-sequence` | 8 | 88 | 21 (6 pairs) |
+| `people-identity-workshop` | 4 | 10 | **0** |
+
+A second probe (Zhang-Suen thinning, path tracing between junctions, anchored to the box rectangles
+that `RETR_CCOMP` holes recover) fixed the boxes — exactly the ERD's three tables, with correct
+rectangles — and produced **2 edges on January, 0 on the ERD and 0 on the workshop**, against about
+eight arrows a human sees. So the order is: boxes are solved, connectors are not, and no weight table
+may be frozen until the connector step reports a measured recall.
+
+Boxes are recoverable: a hollow connected component of the text-masked line mask with
+`fill < 0.45` finds exactly the three ERD tables and the seven January shapes, where contour
+tracing found 0-1. **Connectors are not**, at this fidelity: text-sized OCR boxes anchor ~2% of
+segments (they are labels, not node rectangles), and once boxes are used as anchors the naive
+Hough pass still joins two distinct boxes for only 0-24% of segments. That is the literature's own
+ceiling (arrowhead detection ~73% caps edge recall ~55%), and it means the ADR's provisional
+"≥80% of arrows" gate is **not reachable with the simple pipeline** and must not be promised.
+
+Revised gate, honest about recall: an emitted edge is *always* anchored (both endpoints on two
+distinct boxes, or it is not emitted); **recall is measured and reported per diagram against a human
+count**, and the ERD's two relationship labels (`contains`, `customer reference`) are attached to
+edges geometry finds rather than used to invent them. Before the gate is claimed, the geometry is
+improved in this order, each re-measured rather than assumed:
+
+1. **Boxes from loop topology, deduplicated.** `RETR_CCOMP` holes find the correct rectangles but
+   return each box two to five times (nested contours), so boxes must be deduplicated by containment
+   before they are counted.
+2. **Connectors by skeleton tracing, not Hough-after-subtraction.** Every probe that removed box
+   pixels and then ran Hough lost the connectors themselves, because a connector touches the box it
+   attaches to: subtraction eats the joint. Skelitonise the ink, build a graph of its junctions and
+   ends, and drop the cycles that are box outlines; what remains is the connector set, with real
+   endpoints to anchor.
+3. **Arrowheads** as triangles at connector ends, which is what turns a segment into a directed edge.
+4. **Dashed style** from the gap ratio along a connector, mapped to `PROPOSED`.
+
+Gate: the ERD question is answered from the image, with a region citation that verifies; every
+emitted edge is anchored and the recall figure is stated; two runs byte-identical; the corrupted
+copy scores visibly worse on at least two self-checks.
+
+### Phase 4 — presentation
+
+- `make demo` answers one diagram question and one prose question from the same CLI, so the
+  difference is visible side by side; no long shell invocation.
+- GUI shows a region citation as a highlighted rectangle, not a `path:line` string.
+- `docs/05`, `docs/06`, `docs/07`, `docs/09` updated in the same commit as the code that
+  invalidates them; ADR-0012 moves `Proposed → Accepted`.
+- Dead code and any test that only restates wiring are deleted before the commit.
+
+**Rollback:** phases 3a and 3b are additive and gated by tests; 3c is one module plus one
+registration, so disabling it is removing the `register()` line and deleting its claims by
+`extractor`/`extractor_version` — which phase 3b builds.
+
+**Environment risk, measured:** an image rebuild is impossible while the build sandbox cannot
+resolve package hosts (`apt-get update` fails with *Temporary failure resolving
+'deb.debian.org'*); `--network=host` builds work. Live verification runs against the host-run
+service and the already-pulled Neo4j/Ollama containers.

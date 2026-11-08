@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+import api.app as api_module
 from api.app import create_app
 from mcp_server.server import (
     build_server,
@@ -43,13 +44,14 @@ ENVELOPE = {
     "conflicts": [],
     "gaps": ["No test covers the post-removal availability path."],
     "degraded": False,
+    "evidence": [],
 }
 
 CQP = {
     "cqp_version": "1.0",
     "intent": "STATE_OF",
     "anchors": [{"kind": "Service", "key": "inventory-service", "match": "exact"}],
-    "traverse": {"predicates": ["READS_FROM"], "direction": "BOTH", "max_hops": 1, "max_nodes": 10},
+    "traverse": {"predicates": ["READS_FROM"], "direction": "BOTH", "max_nodes": 10},
     "time": {"as_of": "now", "status_in": ["VALID", "DEPRECATED"], "include_superseded_chain": True},
     "evidence": {"min_confidence": 0.5, "require_citations": True, "max_spans_per_claim": 2},
     "output": {"token_budget": 2000, "include_conflicts": True},
@@ -62,8 +64,10 @@ class StubService:
     def __init__(self) -> None:
         self.answers: list[dict] = []
         self.plans: list[str] = []
+        self.executed: list[dict] = []
+        self.entities: list[tuple[str, str]] = []
 
-    def answer(self, question, *, intent=None, as_of=None, status_in=None, token_budget=2000):
+    def answer(self, question, *, intent=None, as_of=None, status_in=None, token_budget=2000, effort=None, detail=None):
         self.answers.append(
             {
                 "question": question,
@@ -71,17 +75,43 @@ class StubService:
                 "as_of": as_of,
                 "status_in": status_in,
                 "token_budget": token_budget,
+                "effort": effort,
+                "detail": detail,
             }
         )
         return ENVELOPE
+
+    def explain(self, question):
+        self.plans.append(question)
+        return {**CQP, "source": "deterministic", "detail": "stub"}
 
     def plan(self, question):
         self.plans.append(question)
         return CQP
 
+    def execute(self, plan):
+        self.executed.append(plan)
+        return ENVELOPE
+
+    def entity(self, kind, key):
+        self.entities.append((kind, key))
+        return ENVELOPE
+
+    def sources(self):
+        return [{"path": "att-hackathon-task/README.md", "chunks": 3}]
+
+    def index_status(self):
+        return {"claims": 1, "chunks": 3, "sources": 1}
+
 
 def client() -> TestClient:
     return TestClient(create_app(StubService()))
+
+
+@pytest.fixture(autouse=True)
+def offline_planner(monkeypatch):
+    """Health probes the model over HTTP; tests must not depend on a local Ollama."""
+    monkeypatch.setattr(api_module, "_planner_state", lambda: "ok")
 
 
 def test_query_passes_the_envelope_exactly() -> None:
@@ -105,6 +135,8 @@ def test_query_passes_the_envelope_exactly() -> None:
             "as_of": "2026-01-01",
             "status_in": ["VALID"],
             "token_budget": 500,
+            "effort": None,
+            "detail": None,  # the service applies its own default (medium)
         }
     ]
 
@@ -122,7 +154,7 @@ def test_plan_is_returned_without_execution() -> None:
     service = StubService()
     response = TestClient(create_app(service)).post("/v1/plan", json={"question": "does inventory use redis?"})
 
-    assert response.json() == CQP
+    assert response.json() == {**CQP, "source": "deterministic", "detail": "stub"}
     assert service.plans == ["does inventory use redis?"]
     assert service.answers == []
 
@@ -131,7 +163,51 @@ def test_healthz() -> None:
     response = client().get("/healthz")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {
+        "status": "ok",
+        "graph": "not_configured",
+        "planner_model": "ok",
+    }
+
+
+def test_healthz_is_503_when_the_graph_cannot_answer() -> None:
+    """#77: a constant `{"status": "ok"}` reported a healthy server while every query
+    failed. A backend whose driver raises must make the probe fail."""
+
+    class DeadGraph:
+        spans = SpanStore(discover([CORPUS]))
+
+        class driver:
+            @staticmethod
+            def verify_connectivity() -> None:
+                raise RuntimeError("graph down")
+
+        def answer(self, question, **kwargs):
+            raise RuntimeError("graph down")
+
+        def plan(self, question):
+            raise RuntimeError("graph down")
+
+    response = TestClient(create_app(DeadGraph())).get("/healthz")
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["status"] == "degraded"
+    assert body["graph"] == "error: RuntimeError"
+    assert body["planner_model"] == "ok"
+
+
+def test_healthz_reports_a_reachable_graph() -> None:
+    class LiveGraph(StubService):
+        class driver:
+            @staticmethod
+            def verify_connectivity() -> None:
+                return None
+
+    body = TestClient(create_app(LiveGraph())).get("/healthz").json()
+
+    assert body["graph"] == "ok"
+    assert body["status"] == "ok"
 
 
 def test_span_returns_the_cited_bytes() -> None:
@@ -219,7 +295,7 @@ def test_one_server_serves_the_web_ui_and_the_api(tmp_path: Path) -> None:
 
     page = web.get("/")
     assert page.status_code == 200 and page.headers["content-type"].startswith("text/html")
-    assert web.get("/healthz").json() == {"status": "ok"}
+    assert web.get("/healthz").json()["status"] == "ok"
     assert web.post("/v1/query", json={"question": "q"}).json() == ENVELOPE
 
 
@@ -243,6 +319,42 @@ def test_mcp_http_rejects_an_unknown_tool_and_a_missing_parameter() -> None:
     assert client().post("/v1/mcp/context_risks", json={"params": {}}).status_code == 400
 
 
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"path": "docs/adr/003-stock-cache.md", "start": [1], "end": 6},
+        {"path": "docs/adr/003-stock-cache.md", "start": 6, "end": {"n": 6}},
+        {"path": "docs/adr/003-stock-cache.md", "start": True, "end": 6},
+        {"path": 7, "start": 1, "end": 6},
+    ],
+)
+def test_mcp_http_wrong_typed_parameter_is_400_not_500(params) -> None:
+    """#71: `int(params["start"])` raised TypeError, which the route did not catch, so a
+    client mistake surfaced as a 500. Every parameter is now checked once, centrally."""
+    response = client().post("/v1/mcp/resolve_span", json={"params": params})
+
+    assert response.status_code == 400
+    assert any(name in response.json()["detail"] for name in ("start", "end", "path"))
+
+
+def test_mcp_http_missing_required_parameter_names_it() -> None:
+    """A citation is lines or a region; neither is a caller error naming both options."""
+    response = client().post("/v1/mcp/resolve_span", json={"params": {"path": "a.md", "start": 1}})
+
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert "end" in detail and "region" in detail
+
+
+def test_mcp_http_accepts_a_numeric_string_for_an_integer_parameter() -> None:
+    body = client().post(
+        "/v1/mcp/resolve_span",
+        json={"params": {"path": "docs/adr/003-stock-cache.md", "start": "6", "end": "6"}},
+    ).json()
+
+    assert body["result"]["start"] == 6
+
+
 def test_mcp_http_span_returns_the_source_bytes() -> None:
     body = client().post(
         "/v1/mcp/resolve_span",
@@ -251,3 +363,64 @@ def test_mcp_http_span_returns_the_source_bytes() -> None:
 
     assert body["result"]["text"].strip()  # read from the corpus, not from the answer
     assert client().post("/v1/mcp/resolve_span", json={"params": {"path": "nope.md", "start": 1, "end": 2}}).json()["result"]["error"] == "not_found"
+
+def test_execute_runs_a_supplied_plan_and_returns_the_envelope() -> None:
+    service = StubService()
+    response = TestClient(create_app(service)).post("/v1/execute", json={"plan": CQP})
+
+    assert response.status_code == 200
+    assert response.json() == ENVELOPE
+    assert service.executed == [CQP]
+
+
+def test_entity_route_asks_for_one_identity() -> None:
+    service = StubService()
+    response = TestClient(create_app(service)).get("/v1/entity/Service/inventory-service")
+
+    assert response.status_code == 200
+    assert response.json() == ENVELOPE
+    assert service.entities == [("Service", "inventory-service")]
+
+
+def test_sources_route_lists_the_index_and_404s_an_unknown_path() -> None:
+    client = TestClient(create_app(StubService()))
+
+    assert client.get("/v1/sources").json() == [
+        {"path": "att-hackathon-task/README.md", "chunks": 3}
+    ]
+    assert client.get("/v1/sources/README.md").status_code == 200
+    assert client.get("/v1/sources/nope.md").status_code == 404
+
+
+def test_index_status_reports_counts_not_a_constant() -> None:
+    response = TestClient(create_app(StubService())).get("/v1/index/status")
+
+    assert response.json() == {"claims": 1, "chunks": 3, "sources": 1}
+
+
+def test_readyz_follows_the_graph_and_not_the_model() -> None:
+    ready = TestClient(create_app(StubService()))
+    assert ready.get("/readyz").status_code == 200
+
+    class DeadGraph(StubService):
+        driver = type("D", (), {"verify_connectivity": staticmethod(lambda: (_ for _ in ()).throw(RuntimeError("down")))})()
+
+    assert TestClient(create_app(DeadGraph())).get("/readyz").status_code == 503
+
+
+def test_the_rest_route_forwards_the_detail_level_the_ui_shows():
+    """The UI offers the knob, so the route must carry it, not silently drop it."""
+    service = StubService()
+    TestClient(create_app(service)).post("/v1/query", json={"question": "q", "detail": "high"})
+
+    assert service.answers[-1]["detail"] == "high"
+
+
+def test_the_tool_specs_advertise_detail_with_the_agent_default():
+    """An agent learns the knob from the schema, and `low` must be what the schema says."""
+    specs = {spec["name"]: spec for spec in client().get("/v1/mcp").json()}
+
+    detail = specs["context_search"]["params"]["detail"]
+    assert detail["enum"] == ["low", "medium", "high"]
+    assert detail["default"] == "low"
+    assert "detail" not in specs["resolve_span"]["params"]

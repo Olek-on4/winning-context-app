@@ -13,10 +13,10 @@ function Citations({ result, onSpan }: { result: Record<string, unknown>; onSpan
   if (cited.length === 0) return null
   return (
     <div className="dev-citations">
-      <div className="sidebar-label">CITATIONS — click to read the source bytes</div>
+      <p className="eyebrow">Citations - click to read the source bytes</p>
       {cited.slice(0, 8).map((c) => (
         <button key={`${c.path}:${c.lines[0]}:${c.statement}`} type="button" className="dev-cite" onClick={() => onSpan(c)}>
-          <code>{c.path}:{c.lines[0]}–{c.lines[1]}</code>
+          <code>{c.path}:{c.lines[0]}-{c.lines[1]}</code>
           <span>{c.statement}</span>
         </button>
       ))}
@@ -109,60 +109,58 @@ export default function DeveloperView() {
   return (
     <section className="dev">
       <header className="dev-head">
-        <h2>API &amp; MCP console</h2>
-        <p>
-          Each button posts to the running service. The endpoint, the parameters and the raw JSON
-          answer are shown verbatim, and every REST call the page makes is listed underneath.
-        </p>
+        <h2>API</h2>
+        <p>One service, two transports: REST and MCP. The same call, shown as the request and the response.</p>
       </header>
 
-      <div className="dev-tools">
-        {tools.map((t) => (
-          <button
-            key={t.name}
-            type="button"
-            className={`dev-tool ${t.name === name ? 'active' : ''}`}
-            onClick={() => {
-              setName(t.name)
-              setValues(seed(t))
-              setCall(null)
-              setSpan(null)
-            }}
-          >
-            <code>POST /v1/mcp/{t.name}</code>
-            <strong>{t.intent}</strong>
-            <span>{t.summary}</span>
-          </button>
-        ))}
-      </div>
+      <div className="dev-layout">
+        <div className="dev-left">
+          <p className="eyebrow dev-pane-label">Tools</p>
+          <div className="dev-tools">
+            {tools.map((t) => (
+              <button
+                key={t.name}
+                type="button"
+                className={`dev-tool ${t.name === name ? 'active' : ''}`}
+                onClick={() => {
+                  setName(t.name)
+                  setValues(seed(t))
+                  setCall(null)
+                  setSpan(null)
+                }}
+              >
+                <code>POST /v1/mcp/{t.name}</code>
+                <strong>{t.intent}</strong>
+                <span>{t.summary}</span>
+              </button>
+            ))}
+          </div>
 
-      <div className="dev-form">
-        {Object.entries(spec?.params ?? {})
-          .filter(([, p]) => p.required || p.type !== 'array')
-          .map(([key, p]) => (
-            <label key={key} className="dev-field">
-              <span>{key}{p.required ? ' *' : ''}</span>
-              <input
-                type={p.format === 'date' ? 'date' : 'text'}
-                value={values[key] ?? ''}
-                onChange={(e) => setValues({ ...values, [key]: e.target.value })}
-                aria-label={key}
-              />
-            </label>
-          ))}
-        <button type="button" className="search-button" onClick={run} disabled={busy}>
-          {busy ? 'Running…' : 'Run tool'}
-        </button>
-      </div>
+          <div className="dev-form">
+            {Object.entries(spec?.params ?? {})
+              .filter(([, p]) => p.required || p.type !== 'array')
+              .map(([key, p]) => (
+                <label key={key} className="dev-field">
+                  <span>{key}{p.required ? ' *' : ''}</span>
+                  <input
+                    type={p.format === 'date' ? 'date' : 'text'}
+                    value={values[key] ?? ''}
+                    onChange={(e) => setValues({ ...values, [key]: e.target.value })}
+                    aria-label={key}
+                  />
+                </label>
+              ))}
+            <button type="button" className="search-button" onClick={run} disabled={busy}>
+              {busy ? 'Running…' : 'Run tool'}
+            </button>
+          </div>
 
-      <div className="dev-exchange">
-        <div className="dev-request">
-          <div className="sidebar-label">REQUEST</div>
-          <pre>{`POST /v1/mcp/${name}\n${pretty({ params: paramsFor(spec) })}`}</pre>
+          <pre className="dev-request">{`POST /v1/mcp/${name}\n${pretty({ params: paramsFor(spec) })}`}</pre>
         </div>
-        <div className="dev-response">
-          <div className="sidebar-label">RESPONSE {call && <em>{call.result.claims ? `${(call.result.claims as unknown[]).length} claims` : 'span'}</em>}</div>
-          {error ? <p className="dev-error">{error}</p> : <pre>{call ? pretty(call.result) : 'Run a tool to see its answer.'}</pre>}
+
+        <div className="dev-right">
+          <p className="eyebrow dev-pane-label">Response {call && (call.result.claims ? `· ${(call.result.claims as unknown[]).length} claims` : '· span')}</p>
+          {error ? <p className="dev-error">{error}</p> : <pre className="dev-response">{call ? pretty(call.result) : 'Run a tool to see its answer.'}</pre>}
         </div>
       </div>
 
@@ -170,14 +168,14 @@ export default function DeveloperView() {
 
       {span && (
         <div className="dev-span">
-          <div className="sidebar-label">SOURCE BYTES · {span.path}</div>
+          <p className="eyebrow">Source bytes · {span.path}</p>
           <pre>{span.text}</pre>
         </div>
       )}
 
       {spec && (
         <div className="dev-spec">
-          <div className="sidebar-label">PARAMETERS ACCEPTED BY {spec.name}</div>
+          <p className="eyebrow">Parameters accepted by {spec.name}</p>
           <ul>
             {Object.entries(spec.params).map(([key, p]) => (
               <li key={key}>
@@ -191,7 +189,7 @@ export default function DeveloperView() {
       )}
 
       <div className="dev-trace">
-        <div className="sidebar-label">HTTP TRACE — every call this page made ({api.traces.length})</div>
+        <p className="eyebrow">HTTP trace - every call this page made ({api.traces.length})</p>
         {api.traces.map((t) => (
           <details key={t.id}>
             <summary>

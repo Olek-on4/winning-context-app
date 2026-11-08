@@ -7,7 +7,7 @@ import re
 import pytest
 from pydantic import ValidationError
 
-from retrieval.cqp import CQP, MAX_HOPS, MAX_NODES, Intent, compile, validate_plan
+from retrieval.cqp import CQP, MAX_NODES, Intent, Traverse, compile, validate_plan
 
 ALL_INTENTS = list(Intent)
 
@@ -59,15 +59,26 @@ def test_anchor_values_are_never_interpolated():
 def test_caps_are_clamped_not_trusted():
     plan = make_plan(
         Intent.RELATIONSHIP,
-        traverse={"max_hops": 99, "max_nodes": 5000},
+        traverse={"max_nodes": 5000},
         evidence={"max_spans_per_claim": 99},
     )
 
     _, params = compile(plan)
 
-    assert params["max_hops"] == MAX_HOPS == 3
     assert params["max_nodes"] == MAX_NODES == 50
     assert params["max_spans"] <= 5
+
+
+def test_no_hop_cap_is_claimed_or_bound():
+    """#75: `max_hops` was bound into params and no template ever used it, while a comment
+    promised a hard cap of 3. The templates are single-hop stars, so the field is gone and
+    nothing may claim a hop budget it does not enforce."""
+    for intent in Intent:
+        cypher, params = compile(make_plan(intent))
+
+        assert "max_hops" not in params, intent
+        assert "max_hops" not in cypher, intent
+    assert "max_hops" not in Traverse.model_fields
 
 
 def test_time_defaults_to_valid_and_as_of_binds_as_a_parameter():
@@ -86,8 +97,10 @@ def test_anchor_matches_the_object_not_only_the_entity():
     for intent in Intent:
         cypher, _ = compile(make_plan(intent))
 
-        assert "toLower(c.object) CONTAINS toLower(a)" in cypher, intent
-        assert "toLower(e.key) CONTAINS toLower(a)" in cypher, intent
+        assert "toLower(c.object) CONTAINS toLower($anchor_keys[i])" in cypher, intent
+        assert "toLower(e.key) CONTAINS toLower($anchor_keys[i])" in cypher, intent
+        # An anchor that names a kind must not match an entity of another kind.
+        assert "$anchor_kinds[i]" in cypher, intent
 
 
 def test_superseded_chain_and_conflicts_widen_statuses():
@@ -98,12 +111,34 @@ def test_superseded_chain_and_conflicts_widen_statuses():
     assert conflicts[1]["status_in"] == ["DISPUTED"]
 
 
+def test_timeline_supersession_joins_the_same_subject():
+    """#72: the successor was matched on the predicate alone, so two entities that share
+    one predicate (every service READS_FROM something) superseded each other across
+    subjects. `later` must hang off the anchored entity `e`, not a fresh `(:Entity)`."""
+    cypher, params = compile(make_plan(Intent.TIMELINE))
+
+    assert "OPTIONAL MATCH (later:Claim)-[:ABOUT]->(e)" in cypher
+    assert "-[:ABOUT]->(:Entity)" not in cypher
+    assert "later.predicate = c.predicate" in cypher
+    assert "superseded_by" in cypher
+    assert "max_nodes" in params
+
+
+def test_timeline_tie_break_matches_the_python_rule():
+    """#80: the Cypher picked the lowest id among *every* later claim. It must pick the
+    earliest `valid_from` first and break ties on the lowest id, like `_link_superseded`."""
+    cypher, _ = compile(make_plan(Intent.TIMELINE))
+
+    assert "x.valid_from < m" in cypher, "earliest valid_from must win"
+    assert "x.id < m" in cypher, "ties must break on the lowest claim id"
+
+
 @pytest.mark.parametrize(
     "payload",
     [
         {"intent": "DROP", "anchors": [{"key": "x"}]},
         {"intent": "LOOKUP", "anchors": []},
-        {"intent": "LOOKUP", "anchors": [{"key": "x"}], "traverse": {"max_hops": 0}},
+        {"intent": "LOOKUP", "anchors": [{"key": "x"}], "traverse": {"max_nodes": 0}},
         {"intent": "LOOKUP", "anchors": [{"key": "x"}], "time": {"status_in": ["SCHRODINGER"]}},
         {"intent": "LOOKUP", "anchors": [{"key": "x"}], "time": {"as_of": "not-a-date"}},
         {"intent": "LOOKUP", "anchors": [{"kind": "ANY"}]},

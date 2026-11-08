@@ -182,17 +182,19 @@ Three canonical modes:
   the stale-documentation audit. This is how a team finds every wiki page that needs
   rewriting, which is the feature that makes the service pay for itself after the demo.
 
-Compiled to Cypher, the filter is an interval predicate on indexed relationship
-properties — not a re-ranking heuristic:
+Compiled to Cypher, the filter is an interval predicate on the reified claim, not a
+re-ranking heuristic ([ADR-0002](adr/0002-reified-claims.md)):
 
 ```cypher
-MATCH (s:Service {key: $anchor})-[r:READS_FROM]->(d:Datastore)
-WHERE ($as_of IS NULL OR (r.valid_from <= $as_of
-       AND (r.valid_to IS NULL OR r.valid_to > $as_of)))
-  AND r.status IN $status_in
-OPTIONAL MATCH (r_claim:Claim)<-[:DERIVED_FROM]-(r)
-OPTIONAL MATCH (r_claim)-[:EVIDENCED_BY]->(sp:Span)-[:IN]->(src:Source)
-RETURN d, r.status, r.valid_from, r.valid_to,
-       collect({path: src.path, lines: [sp.start_line, sp.end_line],
-                excerpt: sp.excerpt}) AS citations;
+MATCH (c:Claim)-[:ABOUT]->(e:Entity)
+WHERE e.key CONTAINS $anchor
+  AND c.status IN $status_in
+  AND ($as_of IS NULL OR ((c.valid_from IS NULL OR c.valid_from <= $as_of)
+       AND (c.valid_to IS NULL OR c.valid_to > $as_of)))
+OPTIONAL MATCH (c)-[:EVIDENCED_BY]->(sp:Span)-[:IN]->(src:Source)
+RETURN e.key, c.predicate, c.status, c.valid_from, c.valid_to,
+       collect({path: src.path, lines: [sp.start_line, sp.end_line]}) AS citations
 ```
+
+Relationships are not properties: a validity window lives on the claim that asserts it,
+so there is nothing to time-travel on an edge and no second copy of the same fact.

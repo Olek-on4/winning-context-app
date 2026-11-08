@@ -13,3 +13,8 @@ ADR — it goes in the document it belongs to.
 | [0005](0005-local-models-deterministic-first.md) | Local models, deterministic-first extraction | Accepted |
 | [0006](0006-scope-of-the-build.md) | Scope of the build: four pipelines, six intents, three tools | Accepted |
 | [0008](0008-contradiction-relative-freshness.md) | Contradiction-relative freshness | Accepted |
+| [0009](0009-shipped-surface.md) | The shipped surface, and the scope it re-opened | Accepted |
+| [0010](0010-semantic-claims-and-effort.md) | Claims searchable by meaning; an `effort` knob that widens recall only | Accepted |
+| [0011](0011-evidence-layer.md) | The envelope carries cited evidence, not only claims | Accepted |
+| [0012](0012-diagram-evidence.md) | Diagram evidence: deterministic geometry first, a model last | Proposed |
+| [0013](0013-opt-in-capabilities.md) | Opt-in capabilities and the licence boundary | Accepted |

@@ -88,7 +88,7 @@ question
   → compile         one of six parameterised Cypher templates   (retrieval/cqp.py)
   → execute         read-only against Neo4j
   → assemble        dedupe, rank, verify every citation by hash (retrieval/service.py)
-  → envelope        answer + claims + conflicts + gaps + degraded
+  → envelope        answer + claims + conflicts + gaps + degraded, at the asked-for detail
 ```
 
 The six intents are `LOOKUP`, `STATE_OF`, `RELATIONSHIP`, `CONFLICTS`, `TIMELINE`, `RISKS`
@@ -103,13 +103,18 @@ back off disk, hash it, compare. A citation that fails verification is dropped w
 note in `gaps`. If a whole layer is unavailable — no vectors, no model, no graph rows — the
 answer gets smaller and says so with `degraded: true`, instead of sounding equally certain.
 
+Two knobs, both optional: `effort` 0–4 decides how hard to look, `detail`
+`low|medium|high` decides how much comes back (REST defaults to `medium`, MCP to `low`).
+Neither can relax the gates, so a cheaper answer is smaller, never surer
+([07](07-api-and-mcp.md#effort-and-detail-are-two-different-promises)).
+
 Two transports, one service:
 
 | Surface | What it is for |
 |---|---|
 | `POST /v1/query` | the answer envelope |
 | `POST /v1/plan` | the plan, unexecuted — for debugging trust |
-| `GET /v1/span` | the literal bytes behind a citation |
+| `GET /v1/span` | the literal bytes behind a citation (a rectangle for an image citation) |
 | MCP `context_search`, `context_explain_relationship`, `context_risks`, `resolve_span` | the same service, for agents |
 
 ## Why not just embeddings?

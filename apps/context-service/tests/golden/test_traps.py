@@ -71,8 +71,20 @@ def cited_paths(result: dict) -> set[str]:
     return {c["path"] for claim in result["claims"] for c in claim["citations"]}
 
 
+def answer_names(result: dict, *tokens: str) -> bool:
+    """The answer is non-empty and names the subject the question was about.
+
+    Deliberately not a wording match: the sentence is generated from the claims, so what
+    this asserts is that a summary exists and is about the right thing. The decisive
+    facts are asserted separately, against `status` and `citations`.
+    """
+    text = (result.get("answer") or "").lower()
+    return bool(text) and any(token.lower() in text for token in tokens)
+
+
 def test_g1_removed_cache_is_deprecated_not_absent(service):
     result = ask(service, "Does inventory-service still use a Redis cache?")
+    assert answer_names(result, "inventory-service")
     table = statuses(result)
 
     assert any(s == "VALID" and "sqlite" in name for name, s in table.items())
@@ -83,6 +95,7 @@ def test_g1_removed_cache_is_deprecated_not_absent(service):
 
 def test_g2_renamed_column_is_not_reported_as_current(service):
     result = ask(service, "What fields does the users table have?")
+    assert answer_names(result, "users")
     table = statuses(result)
 
     assert any(s == "VALID" and "account_status" in name for name, s in table.items())
@@ -98,6 +111,7 @@ def test_g2_renamed_column_is_not_reported_as_current(service):
 
 def test_g3_superseded_contract_is_deprecated(service):
     result = ask(service, "What endpoints does the accounts service expose?")
+    assert answer_names(result, "accounts")
     table = statuses(result)
 
     assert any(s == "DEPRECATED" and "/v1/accounts" in name for name, s in table.items())
@@ -106,6 +120,7 @@ def test_g3_superseded_contract_is_deprecated(service):
 
 def test_g4_shared_email_is_not_a_join(service):
     result = ask(service, "How do people and accounts connect?")
+    assert answer_names(result, "people", "accounts")
     table = statuses(result)
 
     assert any("SIMILAR_NAME_TO" in name and s == "DISPUTED" for name, s in table.items())
@@ -115,6 +130,7 @@ def test_g4_shared_email_is_not_a_join(service):
 
 def test_g5_archive_payment_service_is_not_the_payment_flow(service):
     result = ask(service, "Is the PaymentService in the payment flow?")
+    assert answer_names(result, "paymentservice")
     table = statuses(result)
 
     assert any("archive/conference-registration.PaymentService" in name for name in table)
@@ -123,6 +139,7 @@ def test_g5_archive_payment_service_is_not_the_payment_flow(service):
 
 def test_g6_sso_is_proposed_never_valid(service):
     result = ask(service, "Do we have SSO between People and Accounts?")
+    assert answer_names(result, "people", "accounts")
     table = statuses(result)
 
     sso = {name: s for name, s in table.items() if "employee-sso" in name.lower()}
@@ -134,6 +151,7 @@ def test_g6_sso_is_proposed_never_valid(service):
 
 def test_g7_security_concern_stays_disputed(service):
     result = ask(service, "What are the risks in the payments service?")
+    assert answer_names(result, "violates")
     table = statuses(result)
 
     assert any(s == "DISPUTED" for name, s in table.items() if "VIOLATES" in name)

@@ -1,0 +1,24 @@
+# Build context is the repo root (see apps/context-service/Dockerfile): the image needs
+# apps/context-service and etynt_gui. Everything else is either rebuilt in an image layer
+# or supplied at runtime by a bind mount, so it stays out of the context.
+.git
+.githooks
+**/node_modules
+**/dist
+# The UI build stage falls back to this artefact when the npm registry is unreachable
+# (see the Dockerfile); `make ui-build` regenerates it.
+!etynt_gui/dist
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+# Mounted at /repo and /data by compose, never copied into the image.
+vendor
+data
+docs
+infra
+scripts
+AGENTS.md
+README.md
+LICENSE

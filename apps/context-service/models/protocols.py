@@ -25,11 +25,38 @@ class ContextBackend(Protocol):
         intent: str | None = None,
         as_of: str | None = None,
         status_in: list[str] | None = None,
-        token_budget: int = 2000,
+        token_budget: int,
+        effort: int | None = None,
+        detail: str | None = None,
     ) -> dict:
-        """The frozen answer envelope, already budget-spent."""
+        """The answer envelope, already budget-spent.
+
+        `effort` is how hard to look (0-4); `detail` is how much comes back
+        (`low`/`medium`/`high`). Transports default `detail` differently on purpose:
+        REST keeps `medium`, MCP asks for `low`.
+        """
         ...
 
     def plan(self, question: str, *, intent: str | None = None) -> dict:
         """The query plan, inspectable and unexecuted."""
+        ...
+
+    def explain(self, question: str, *, intent: str | None = None) -> dict:
+        """The plan plus `source`/`detail`: whether a model typed it or a parser did."""
+        ...
+
+    def execute(self, plan: dict) -> dict:
+        """Run a caller-supplied CQP; the plan is validated and compiled by the service."""
+        ...
+
+    def entity(self, kind: str, key: str) -> dict:
+        """The answer envelope for one identity, matched exactly rather than by relevance."""
+        ...
+
+    def sources(self) -> list[dict]:
+        """Every indexed root with its chunk count."""
+        ...
+
+    def index_status(self) -> dict:
+        """Node counts for claims, chunks and sources."""
         ...

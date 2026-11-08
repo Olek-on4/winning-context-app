@@ -28,10 +28,13 @@ Anchor lines were re-checked on 2026-11-06.
 
 | Contract | Defined by | State |
 |---|---|---|
-| `contracts/claim.py` — `ClaimRecord` + `Span` | [05:6-40](05-extraction-pipelines.md#one-envelope-six-pipelines--four-ship) | text complete: referential `Span` (no persisted excerpt), `valid_from_precision` / `valid_to_precision` |
-| `contracts/cqp.schema.json` | [06:39-85](06-retrieval.md#the-cqp-schema) | six intents, `IMPACT_OF_CHANGE` removed |
-| `contracts/answer.schema.json` | [06:122-166](06-retrieval.md#answer-assembly) | citations are `{path, lines, hash}`; text resolved by `/v1/span` |
-| `infra/neo4j/schema.cypher` | [03:157-192](03-ontology.md#storage-indexing-and-validation-in-neo4j) | Community-safe: uniqueness only, non-null in code |
+| `apps/context-service/models/claim.py` — `ClaimRecord` + `Span` | [05:6-40](05-extraction-pipelines.md#one-envelope-six-pipelines--four-ship) | implemented: referential `Span` (no persisted excerpt), `valid_from_precision` / `valid_to_precision` |
+| `apps/context-service/retrieval/cqp.py` — the CQP pydantic models | [06:39-85](06-retrieval.md#the-cqp-schema) | implemented: six intents, `IMPACT_OF_CHANGE` removed |
+| `apps/context-service/retrieval/service.py` — the answer envelope | [06:122-166](06-retrieval.md#answer-assembly) | implemented: citations are `{path, lines, hash}` plus `region` for images and `excerpt` at `detail=high`; `detail` decides which fields ship; text resolved by `/v1/span` |
+| `apps/context-service/graph/schema.cypher` | [03:157-192](03-ontology.md#storage-indexing-and-validation-in-neo4j) | Community-safe: uniqueness only, non-null in code |
+
+There is no `contracts/` directory: each contract is the module that owns it, so a
+change cannot land in two places. `infra/neo4j/` holds the compose file, not the schema.
 
 Plus one artefact that buys the parallelism: `data/fixtures/claims-sample.jsonl`,
 30 hand-written claims covering T1 and T2. Dev C and Dev D develop against it from
@@ -42,9 +45,11 @@ minute 20; without it they wait two hours for Dev A.
 - `valid_from_precision` / `valid_to_precision` (`day` | `month`), because
   `releases/2026-06-v1.3.md` yields `2026-06`. Rule: `valid_from` → first day of the
   period, `valid_to` → last day ([04](04-temporal-model.md#partial-dates-one-rule-both-edges-safe)).
-- `Span` is **referential**: `path`, `start_line`, `end_line`, `content_hash`. The excerpt
-  is transient verification input and is never persisted; answer citations carry the same
-  four fields and the text is resolved by `/v1/span`.
+- `Span` is **referential**: `path`, `start_line`, `end_line`, `content_hash`, and an
+  optional `region` (x, y, w, h) for an image, where a rectangle replaces the line and the
+  lines are the `[1, 1]` sentinel. The excerpt is transient verification input and is never
+  persisted; answer citations carry the same fields, plus an `excerpt` only at `detail=high`,
+and the bytes are resolved by `/v1/span`.
 - `schema.cypher` uses **uniqueness constraints only** — property existence is Enterprise
   Edition in Neo4j 5, and we run `neo4j:5-community`. Non-null lives in pydantic and in a
   loader assertion that raises.
@@ -113,7 +118,7 @@ risk.
 - **02:40–03:30** Token budget + ordering (`06`), `conflicts` and `gaps` in the
   envelope, latency measured warm.
 
-**Done when** `uv run pytest tests/cqp` is green with no model running, and
+**Done when** `uv run pytest -q tests/test_cqp.py` is green with no model running, and
 `curl -s localhost:8000/v1/plan -d '{"question":"does inventory use redis?"}'` returns a
 valid CQP with `intent=STATE_OF`.
 
@@ -177,7 +182,7 @@ All five blockers are **resolved and frozen** ([ADR-0006](adr/0006-scope-of-the-
 |---|---|
 | Pack §3/§4 unknown | Deliverable fixed as the seven-trap demo + repo + explained design; §4 outranks this and is re-diffed at CP1 02:00 if it surfaces |
 | Zero-slack critical path | Pure layers built before the event: compiler + six templates + tests (C), answer schema + 30 claims (D), resolver functions + T1 test (B) |
-| Gate 2 mechanism unspecified | Extractors return `excerpt` + `start_line` as a hint; the gate resolves it against the file at its hash, derives `end_line`, drops on absence, counts `span_corrected` |
+| Gate 2 mechanism unspecified | Extractors return `excerpt` + `start_line` as a hint; the gate resolves it against the file at its hash, derives `end_line`, drops on absence, reports `kept/dropped/relocated/ungeated/pass_rate` |
 | Month-precision dates | `valid_from` → day 1, `valid_to` → last day, precision recorded on the claim |
 | Neo4j Enterprise-only constraints | `neo4j:5-community`, uniqueness only, non-null enforced in pydantic + loader assertion |
 | 6 vs 3 tools | Three ship, three remain CQP intents behind `/v1/query` |

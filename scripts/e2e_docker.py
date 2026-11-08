@@ -1,12 +1,19 @@
-"""End-to-end probe against the container stack: REST on :8000 and MCP over `docker run -i`.
+"""End-to-end probe against the container stack: REST on the app port and MCP over `docker run -i`.
 `rehearse.py` proves bring-up from source; this proves the answers survive the boundary.
 
     cd apps/context-service && uv run python ../../scripts/e2e_docker.py
+    ETYT_PROJECT=etyt-b ETYT_APP_PORT=18000 uv run python ../../scripts/e2e_docker.py
+
+Two stacks may share a host (issue #70), so the project name and the published app port
+come from the environment; the defaults are the single-stack values `make e2e` uses.
+Containers are found by compose labels, never by name: `container_name:` is gone, so the
+real names carry the project prefix.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -15,9 +22,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 COMPOSE = REPO / "infra" / "neo4j" / "compose.yaml"
-BASE = "http://127.0.0.1:8000"
+PROJECT = os.getenv("ETYT_PROJECT", "etyt")
+BASE = f"http://127.0.0.1:{os.getenv('ETYT_APP_PORT', '8000')}"
 QUESTION = "Does inventory-service still use a Redis cache?"
-CONTAINERS = ("etyt-neo4j", "etyt-app")
+SERVICES = ("neo4j", "app")
 HEALTH_TIMEOUT = 120
 PASS: list[tuple[str, bool, str]] = []
 
@@ -40,18 +48,29 @@ def http(path: str, body: dict | None = None) -> str:
     return urllib.request.urlopen(request, timeout=20).read().decode()
 
 
+def containers(service: str) -> list[str]:
+    """Running containers of one compose service in this project — names are generated."""
+    return sh("docker", "ps",
+              "--filter", f"label=com.docker.compose.project={PROJECT}",
+              "--filter", f"label=com.docker.compose.service={service}",
+              "--format", "{{.Names}}").stdout.split()
+
+
 def healthy() -> bool:
-    names = sh("docker", "ps", "--format", "{{.Names}}").stdout.split()
     template = "{{.State.Status}}:{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}"
-    return all(name in names and sh("docker", "inspect", "--format", template, name).stdout.strip() == "running:healthy"
-               for name in CONTAINERS)
+    for service in SERVICES:
+        names = containers(service)
+        if not names or any(sh("docker", "inspect", "--format", template, name).stdout.strip() != "running:healthy"
+                            for name in names):
+            return False
+    return True
 
 
 def ensure_up() -> bool:
     if healthy():
         return True
     # First run may pull images, so compose gets twice the health budget; health alone stays capped.
-    up = sh("docker", "compose", "-f", str(COMPOSE), "up", "-d", timeout=2 * HEALTH_TIMEOUT)
+    up = sh("docker", "compose", "-p", PROJECT, "-f", str(COMPOSE), "up", "-d", timeout=2 * HEALTH_TIMEOUT)
     if up.returncode:
         print(up.stderr.strip()[-400:])  # compose's own reason beats a bare timeout
     deadline = time.monotonic() + HEALTH_TIMEOUT
@@ -62,10 +81,14 @@ def ensure_up() -> bool:
 
 def mcp() -> None:
     """Drive the stdio server exactly as a client does, reading until each id answers."""
-    image, _, project = sh("docker", "inspect", "etyt-app", "--format",
+    app = containers("app")
+    if not app:
+        check("MCP handshake", False, f"no running app container in project {PROJECT}")
+        return
+    image, _, project = sh("docker", "inspect", app[0], "--format",
                            '{{.Config.Image}} {{index .Config.Labels "com.docker.compose.project"}}').stdout.strip().partition(" ")
     command = [
-        "docker", "run", "-i", "--rm", "--network", f"{project or 'neo4j'}_default",
+        "docker", "run", "-i", "--rm", "--network", f"{project or PROJECT}_default",
         "-e", "NEO4J_URI=bolt://neo4j:7687", "-e", "NEO4J_USER=neo4j", "-e", "NEO4J_PASSWORD=etyt-context",
         "-e", "CORPUS_ROOT=/repo/vendor/att-hackathon-task",
         "-v", f"{REPO}:/repo:ro", "-v", f"{REPO / 'data'}:/data",
@@ -107,7 +130,7 @@ def mcp() -> None:
 
 def main() -> int:
     up = ensure_up()
-    check("containers up", up, " ".join(CONTAINERS) if up else f"not healthy within {HEALTH_TIMEOUT}s")
+    check("containers up", up, f"project {PROJECT}" if up else f"project {PROJECT} not healthy within {HEALTH_TIMEOUT}s")
     if not up:
         return 1
     check("healthz", json.loads(http("/healthz"))["status"] == "ok", BASE)

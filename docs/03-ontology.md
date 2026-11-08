@@ -151,8 +151,9 @@ resolver combines with recency ([04](04-temporal-model.md#resolution-algorithm))
 | 9 | 0.40 | Diagrams (VLM-extracted) | Capped — see [05](05-extraction-pipelines.md#diagrampipeline--diagramspng). |
 | 10 | 0.20 | `api-specs/history/`, `archive/` | Explicitly superseded or abandoned by path. |
 
-The ranking is a config file, not code. It is the single most contestable thing in
-this design and a judge should be able to argue with it by editing one table.
+The ranking is a table in `apps/context-service/settings.py` (`AUTHORITY`), not a literal
+in a pipeline. It is the single most contestable thing in this design and a judge should
+be able to argue with it by editing one table.
 
 ## Storage, indexing and validation in Neo4j
 
@@ -181,8 +182,8 @@ CREATE CONSTRAINT claim_id IF NOT EXISTS
   FOR (cl:Claim) REQUIRE cl.id IS UNIQUE;
 
 // --- L2: entities ------------------------------------------------------------
-CREATE CONSTRAINT service_key IF NOT EXISTS
-  FOR (s:Service) REQUIRE s.key IS UNIQUE;
+CREATE CONSTRAINT entity_key IF NOT EXISTS
+  FOR (e:Entity) REQUIRE e.key IS UNIQUE;
 CREATE INDEX rel_validity IF NOT EXISTS
   FOR ()-[r:CALLS]-() ON (r.valid_from, r.valid_to);
 ```
@@ -198,13 +199,16 @@ CREATE INDEX rel_validity IF NOT EXISTS
    the excerpt must occur verbatim inside the cited line range; `end_line` is derived
    from the excerpt's newlines, not trusted from the extractor. Found at the hinted
    line → accepted. Found elsewhere in the file → accepted with the corrected line and
-   a `span_corrected` counter. **Not found → dropped, never repaired.** The excerpt is
+   counted as `relocated`. **Not found → dropped, never repaired.** The counters
+   (`kept`, `dropped`, `relocated`, `ungeated`, `pass_rate`) are printed by `cli load`. The excerpt is
    then discarded: only the pointer is persisted (see `Span` above). This is the single
    most effective anti-hallucination measure available and it costs nothing.
 3. **Ontology gate** — `predicate` must exist in the taxonomy above, and the
    subject/object labels must satisfy the predicate's declared domain and range
    (`READS_FROM : Service → Datastore`, not `Service → Person`). Violations are
-   logged with the offending record and the batch continues.
+   logged with the offending record and the batch continues. Implemented in
+   `ingest/ontology.py` against the `PREDICATES` table in `settings.py`, and it runs
+   on the same path as gate 2 (`cli load`), which reports `ontology_rejected`.
 
 Gate 2 is why this is "evidence-backed" rather than "evidence-flavoured". Every
 claim in the graph is reproducibly checkable against a byte range of a file at a

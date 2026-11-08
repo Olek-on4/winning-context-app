@@ -1,19 +1,126 @@
+/* Design tokens: one modular scale, one measure, four borrowed hues.
+   Ratio 1.5 generates every space step, per Every Layout's rudiments. */
 :root {
-  font-family: "Industrial Host", "Host Grotesk", Arial, sans-serif;
-  color: #181e22;
-  background: #aeb6ba;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  --ratio: 1.5;
+  --s-5: calc(1rem / (var(--ratio) * var(--ratio) * var(--ratio) * var(--ratio) * var(--ratio)));
+  --s-4: calc(1rem / (var(--ratio) * var(--ratio) * var(--ratio) * var(--ratio)));
+  --s-3: calc(1rem / (var(--ratio) * var(--ratio) * var(--ratio)));
+  --s-2: calc(1rem / (var(--ratio) * var(--ratio)));
+  --s-1: calc(1rem / var(--ratio));
+  --s0: 1rem;
+  --s1: calc(1rem * var(--ratio));
+  --s2: calc(1rem * var(--ratio) * var(--ratio));
+  --s3: calc(1rem * var(--ratio) * var(--ratio) * var(--ratio));
+
+  /* the scale's own name for "a space between siblings" */
+  --space: var(--s-1);
+  --measure: 62ch;
+
+  /* four hue families, read off the bookshelf mark */
+  --navy: #1f2a3f;
+  --violet: #5b4a91;
+  --teal: #2f7d73;
+  --amber: #b97a17;
+  --rose: #a8455a;
+
+  --ink: var(--navy);
+  --muted: #67655f;
+  --paper: #faf7f1;
+  --surface: #fffdf8;
+  --sunken: #f1ebdf;
+  --rule: #e3dccd;
+  --rule-strong: #c8bfae;
+
+  --violet-wash: #eee9f7;
+  --teal-wash: #e3f1ee;
+  --amber-wash: #f8eed9;
+  --rose-wash: #f8e6e8;
+
+  --radius: 6px;
+  --radius-sm: 4px;
+  --border-thin: 1px;
+  --shadow-1: 0 1px 2px #1f2a3f14;
+  --shadow-2: 0 1px 2px #1f2a3f12, 0 10px 28px #1f2a3f10;
+
+  --sidebar-width: 15rem;
+  --content-min: 60%;
+  --grid-min: 16rem;
+  --threshold: 40rem;
+  --topbar: 3.5rem;
+
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  color-scheme: light;
+}
+
+/* Tier 1: universal styles. The measure axiom lives on the text, because
+   max-inline-size does not inherit. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--paper);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 1rem;
+  line-height: var(--ratio);
   -webkit-font-smoothing: antialiased;
 }
 
-* { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; }
-button, input { font: inherit; }
-button { cursor: pointer; }
-button:focus-visible,
-input:focus-visible,
-a:focus-visible {
-  outline: 2px solid #f15b22;
-  outline-offset: 3px;
+h1,
+h2,
+h3,
+h4,
+p,
+blockquote,
+figcaption {
+  max-inline-size: var(--measure);
+}
+
+p,
+h1,
+h2,
+h3,
+h4,
+dl,
+dd,
+pre {
+  margin: 0;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+code,
+pre,
+kbd {
+  font-family: var(--mono);
+}
+
+::selection {
+  background: var(--violet);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid var(--violet);
+  outline-offset: 2px;
 }

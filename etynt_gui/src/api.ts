@@ -3,7 +3,12 @@
 
 export type Status = 'VALID' | 'DEPRECATED' | 'DISPUTED' | 'PLANNED' | 'PROPOSED' | 'UNKNOWN'
 
-export type Citation = { path: string; lines: [number, number]; hash?: string }
+export type Detail = 'low' | 'medium' | 'high'
+
+export type Citation = { path: string; lines: [number, number]; hash?: string; region?: number[]; excerpt?: string; suspicious?: boolean }
+
+/** Two reads of one image are two citations: the rectangle is part of the identity. */
+export const citationKey = (c: Citation) => `${c.path}:${c.lines[0]}:${(c.region ?? []).join(',')}`
 
 export type Claim = {
   statement: string
@@ -14,18 +19,45 @@ export type Claim = {
   superseded_by: string | null
   citations: Citation[]
   reason?: string
+  id: string
+  subject: string
+  predicate: string
+  polarity: string
+  why_not_valid: string | null
+  extractor?: string
+  extractor_version?: string
+  observed_at?: string
+  modality?: string
+  authority?: string
 }
 
 export type Conflict = { a: string; b: string; note: string }
 
+/** Quoted corpus text. Cited by line, never given a status: it is not a verdict. */
+export type Passage = {
+  path: string
+  lines: [number, number]
+  heading: string
+  text: string
+  score: number | null
+  via: string // 'bm25', 'vector', or both joined with '+'
+  hash?: string
+  suspicious?: boolean // deterministic injection flag; the text is still returned
+  region?: number[] // an image passage is cited by its rectangle
+}
+
 export type Envelope = {
   answer: string
+  detail: string
   claims: Claim[]
   not_valid?: Claim[] // present once the service splits by verdict itself
   conflicts: Conflict[]
   gaps: string[]
+  // Absent at detail=low: the UI must treat missing as "no passages".
+  evidence?: Passage[]
   degraded: boolean
   truncated?: boolean
+  plan?: { intent: string; effort: number; as_of: string | null; status_in: string[]; token_budget: number; detail: string }
 }
 
 export type Plan = {
@@ -80,7 +112,7 @@ async function call<T>(input: string, init: RequestInit, as: 'json' | 'text' = '
   try {
     response = await fetch(input, init)
   } catch (e) {
-    // A rejected fetch leaves no response; record it anyway — "the service is down" is
+    // A rejected fetch leaves no response; record it anyway: "the service is down" is
     // exactly the moment the demo must still be able to show evidence for.
     record({
       method: (init.method ?? 'GET').toUpperCase(),
@@ -125,8 +157,8 @@ const post = (body: unknown, signal?: AbortSignal): RequestInit => ({
   signal,
 })
 
-export const query = (question: string, asOf: string | null, signal?: AbortSignal) =>
-  call<Envelope>('/v1/query', post({ question, as_of: asOf || null }, signal))
+export const query = (question: string, asOf: string | null, signal?: AbortSignal, detail?: Detail) =>
+  call<Envelope>('/v1/query', post({ question, as_of: asOf || null, ...(detail ? { detail } : {}) }, signal))
 
 export const plan = (question: string, signal?: AbortSignal) =>
   call<Plan>('/v1/plan', post({ question }, signal))
@@ -134,6 +166,12 @@ export const plan = (question: string, signal?: AbortSignal) =>
 export const span = (c: Citation, signal?: AbortSignal) => {
   const params = new URLSearchParams({ path: c.path, start: String(c.lines[0]), end: String(c.lines[1]) })
   return call<string>(`/v1/span?${params}`, { signal }, 'text')
+}
+
+/** An image citation resolves to the cited rectangle, not to the file decoded as text. */
+export const spanImageUrl = (c: Citation) => {
+  const region = (c.region ?? []).join(',')
+  return `/v1/span?${new URLSearchParams({ path: c.path, region })}`
 }
 
 export const healthy = async () => {
@@ -144,8 +182,8 @@ export const healthy = async () => {
   }
 }
 
-// Mirrors the service's own rule (ADR-0007): an agent may use a claim only if it is
-// VALID and at least this confident. Used until the envelope carries `not_valid`.
+// A display split, not a service rule: the envelope's `not_valid` is authoritative when
+// present, and the service's own floor is `plan.evidence.min_confidence` (default 0.0).
 export const MIN_CONFIDENCE = 0.4
 
 export function split(envelope: Envelope): { current: Claim[]; notValid: Claim[] } {
@@ -160,7 +198,7 @@ export function split(envelope: Envelope): { current: Claim[]; notValid: Claim[]
 }
 
 export function whyNotValid(claim: Claim): string {
-  if (claim.reason) return claim.reason
+  if (claim.why_not_valid) return claim.why_not_valid
   switch (claim.status) {
     case 'VALID':
       return `Evidence too weak: ${pct(claim.confidence)} is below the ${pct(MIN_CONFIDENCE)} threshold.`

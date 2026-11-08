@@ -37,7 +37,7 @@ class StubBackend:
         self.spans = MemorySpans()
         self.calls: list[dict] = []
 
-    def answer(self, question, *, intent=None, as_of=None, status_in=None, token_budget=2000):
+    def answer(self, question, *, intent=None, as_of=None, status_in=None, token_budget=2000, effort=None, detail=None):
         self.calls.append(
             {"question": question, "intent": intent, "as_of": as_of, "status_in": status_in,
              "token_budget": token_budget}
@@ -46,6 +46,9 @@ class StubBackend:
 
     def plan(self, question, *, intent=None):
         return {"intent": intent or "STATE_OF", "question": question}
+
+    def explain(self, question, *, intent=None):
+        return {**self.plan(question, intent=intent), "source": "deterministic"}
 
 
 def client(service) -> TestClient:
@@ -68,7 +71,7 @@ def test_plan_passes_through_both_transports() -> None:
 
     rest = client(service).post("/v1/plan", json={"question": "what holds?"})
 
-    assert rest.json() == {"intent": "STATE_OF", "question": "what holds?"}
+    assert rest.json() == {"intent": "STATE_OF", "question": "what holds?", "source": "deterministic"}
 
 
 def test_span_route_reads_through_the_backend_only() -> None:

@@ -9,15 +9,15 @@ from __future__ import annotations
 import json
 import os
 import re
-import sys
 from datetime import date
 
 import httpx
 
+from logging_setup import logger
 from retrieval.cqp import CQP, Anchor, Intent, TimeFilter, Traverse, validate_plan
-
-DEFAULT_HOST = "http://localhost:11434"
-DEFAULT_MODEL = "llama3.2"
+from settings import AUTO_EFFORT, AUTO_EFFORT_NAMED, MODEL_KEEP_ALIVE, MODEL_TIMEOUT_S, PREDICATE_CUES
+from settings import OLLAMA_HOST as DEFAULT_HOST
+from settings import PLANNER_MODEL as DEFAULT_MODEL
 
 # All five states a claim can hold. The answer labels each one, so hiding PROPOSED or
 # DISPUTED would only make the service look more certain than it is.
@@ -30,20 +30,6 @@ _PREDICATE_NAMES = {
     "VIOLATES", "PROHIBITS", "MENTIONS", "CAUSED_BY", "RESOLVED_BY", "PLANNED_IN",
     "DISCUSSED_IN",
 }
-_PREDICATE_PHRASES = {
-    "depends on": "DEPENDS_ON",
-    "reads from": "READS_FROM",
-    "writes to": "WRITES_TO",
-    "authenticates via": "AUTHENTICATES_VIA",
-    "owns": "OWNS",
-    "violates": "VIOLATES",
-    "supersedes": "SUPERSEDES",
-    "implemented by": "IMPLEMENTS",
-    "prohibits": "PROHIBITS",
-    "exposes": "EXPOSES",
-    "expose": "EXPOSES",
-}
-
 _IDENTIFIERS = (
     re.compile(r"`([^`\n]{1,80})`"),
     re.compile(r"\"([^\"\n]{1,80})\""),
@@ -56,12 +42,19 @@ _IDENTIFIERS = (
 )
 
 
-def plan(question: str, intent: str | None = None, model: bool = True) -> CQP:
+def plan(
+    question: str,
+    intent: str | None = None,
+    model: bool = True,
+    trace: dict[str, str] | None = None,
+) -> CQP:
     """Never raises. Deterministic first (ADR-0005): the keyword plan covers every
     question that names an identifier, service, table or endpoint. The model is the
     fallback for questions that name nothing, and never overrides a deterministic plan.
 
-    `model=False` disables even that fallback.
+    `model=False` disables even that fallback. `trace`, when given, is filled with where
+    the plan came from so the caller can show it: "the model never ran" and "the model ran
+    and agreed" are different answers to "is this parsed or understood".
     """
     result: CQP | None = None
     try:
@@ -71,19 +64,38 @@ def plan(question: str, intent: str | None = None, model: bool = True) -> CQP:
     # A question without a quoted, dotted, dashed or CamelCase identifier names nothing
     # the keyword planner can type, so it gets one model attempt. With an identifier the
     # deterministic plan wins and the model is never called (ADR-0005).
-    if model and not _names_an_identifier(question):
+    if trace is not None:
+        trace["source"] = "deterministic"
+    if model and _names_an_identifier(question):
+        if trace is not None:
+            trace["detail"] = "the question names an identifier; ADR-0005 keeps the keyword plan"
+    elif model:
         try:
             modelled = _from_model(question)
         except Exception as exc:
             _warn_model(exc)
             modelled = None
+            if trace is not None:
+                trace["detail"] = f"model call failed: {type(exc).__name__}"
         # The model refines, it never replaces: only a typed anchor (a Service, Table or
         # Endpoint it recognised) beats the keyword plan. An all-ANY model plan lost
         # evidence on the accounts and payments questions, so it is discarded.
         if modelled is not None and any(a.kind != "ANY" for a in modelled.anchors):
             result = modelled
+            if trace is not None:
+                trace["source"] = "model"
+                trace["detail"] = "typing anchors only the model resolved"
+        elif trace is not None:
+            trace.setdefault("detail", "model plan carried no typed anchor; discarded")
     if result is None:
         return _safe(question)
+    # Semi-automatic effort: a named thing is already an exact match, a question that
+    # names nothing is the case meaning search exists for. The caller may override it.
+    if trace is not None:
+        trace.setdefault("effort", str(AUTO_EFFORT))
+    result = result.model_copy(
+        update={"effort": AUTO_EFFORT_NAMED if _names_an_identifier(question) else AUTO_EFFORT}
+    )
     if intent is not None:
         try:
             forced = Intent(str(intent).strip().upper())
@@ -104,8 +116,8 @@ def plan(question: str, intent: str | None = None, model: bool = True) -> CQP:
 def _from_model(question: str) -> CQP:
     host = os.environ.get("OLLAMA_HOST", DEFAULT_HOST).rstrip("/")
     model = os.environ.get("OLLAMA_MODEL", DEFAULT_MODEL)
-    timeout = float(os.environ.get("OLLAMA_TIMEOUT", "10"))
-    keep_alive = os.environ.get("OLLAMA_KEEP_ALIVE", "30m")
+    timeout = float(os.environ.get("OLLAMA_TIMEOUT", MODEL_TIMEOUT_S))
+    keep_alive = os.environ.get("OLLAMA_KEEP_ALIVE", MODEL_KEEP_ALIVE)
     payload = {
         "model": model,
         "prompt": _prompt(question),
@@ -188,10 +200,7 @@ def _keywords(question: str, intent: str | None = None) -> CQP:
     return CQP(
         intent=chosen,
         anchors=anchors,
-        traverse=Traverse(
-            predicates=predicates,
-            max_hops=2 if chosen is Intent.RELATIONSHIP else 1,
-        ),
+        traverse=Traverse(predicates=predicates),
         time=_time_for(chosen, as_of),
     )
 
@@ -201,6 +210,7 @@ def _names_an_identifier(question: str) -> bool:
     return any(pattern.search(question) for pattern in _IDENTIFIERS)
 
 
+_LOG = logger("planner")
 _MODEL_WARNED: set[str] = set()
 
 
@@ -209,7 +219,7 @@ def _warn_model(exc: Exception) -> None:
     key = f"{type(exc).__name__}: {exc}"[:200]
     if key not in _MODEL_WARNED:
         _MODEL_WARNED.add(key)
-        print(f"planner: model unavailable, using the deterministic plan ({key})", file=sys.stderr, flush=True)
+        _LOG.warning("model unavailable, using the deterministic plan (%s)", key)
 
 
 def _forced_intent(intent: str | None) -> Intent | None:
@@ -270,18 +280,12 @@ def _as_of(question: str) -> str | None:
     return match.group(1)
 
 
-# Words that carry no anchor value; keeps plain-English questions findable.
-_STOPWORDS = {
-    "the", "a", "an", "is", "are", "was", "were", "does", "do", "did", "still", "have",
-    "has", "had", "what", "which", "who", "how", "where", "when", "why", "any",
-    "and", "or", "of", "in", "on", "for", "to", "from", "with", "about", "use", "uses",
-    "using", "table", "fields", "field", "columns", "system", "service", "there", "tell",
-    "me", "we", "it", "current", "currently", "now", "status", "value", "happened",
-    "happen", "changed", "change", "used", "make", "makes", "work", "works",
-}
-
-
 def _anchors(question: str) -> list[Anchor]:
+    """Candidate anchors, unfiltered: the graph decides which of these are words at all.
+
+    There is no stopword list here on purpose. A token is noise if no entity key contains
+    it, and that is a property of the corpus, not of English (see `ContextService._attested`).
+    """
     found: list[str] = []
     for pattern in _IDENTIFIERS:
         for match in pattern.finditer(question):
@@ -289,37 +293,27 @@ def _anchors(question: str) -> list[Anchor]:
             if token and len(token) <= 80 and token not in found:
                 found.append(token)
     if not found:
-        # No identifier in the question: content words still hit entity keys such as
-        # `users` or `invoices`. Keep more than three — the entity is often mentioned
-        # late ("what happened to state in invoices").
-        found = [
-            word.lower()
-            for word in re.findall(r"[A-Za-z][A-Za-z0-9_]{2,}", question)
-            if word.lower() not in _STOPWORDS
-        ][:6]
+        # Every word is a candidate; `_attested` keeps the ones the corpus knows. No
+        # stopword list, so this works for a corpus in any language.
+        found = re.findall(r"[A-Za-z][A-Za-z0-9_]{2,}", question)[:8]
     anchors: list[Anchor] = []
-    for token in found[:4]:
+    for token in found[:8]:
         if " " in token:
             anchors.append(Anchor(kind="ANY", text=token, match="hybrid"))
         else:
-            anchors.append(Anchor(kind=_kind(token), key=token, match="exact"))
+            anchors.append(Anchor(kind="ANY", key=token, match="exact"))
     return anchors
 
 
-def _kind(token: str) -> str:
-    if re.fullmatch(r"\d{4,5}", token):
-        return "Port"
-    if re.fullmatch(r"[A-Z][A-Z0-9_]+", token):
-        return "EnvVar"
-    if token.endswith(("-service", "-gateway")):
-        return "Service"
-    return "ANY"
-
-
 def _predicates(question: str) -> list[str]:
+    """Predicates named in the question, from the ontology's own vocabulary.
+
+    Two sources, both declared rather than guessed: a predicate written literally in the
+    question, and the cue words `settings.PREDICATE_CUES` maps onto it.
+    """
     lower = question.lower()
-    found = {name for name in _PREDICATE_NAMES if re.search(rf"\b{name}\b", question)}
-    for phrase, name in _PREDICATE_PHRASES.items():
-        if phrase in lower:
-            found.add(name)
+    found = {name for name in _PREDICATE_NAMES if re.search(rf"\b{name.lower()}\b", lower)}
+    for predicate, cues in PREDICATE_CUES.items():
+        if any(re.search(rf"\b{re.escape(cue)}\b", lower) for cue in cues):
+            found.add(predicate)
     return sorted(found)

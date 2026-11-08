@@ -43,8 +43,6 @@ Violating any of these is a defect regardless of what the task asked for.
    guarantee the whole system rests on.
 8. **No model-authored queries.** The planner emits a validated Context Query Plan.
    Cypher comes from the compiler's template library, parameterised. See ADR-0003.
-9. **License**: MPL-2.0 for our files. New source files carry the Exhibit A notice
-   header where the language supports comments.
 
 ## Engineering principles
 
@@ -59,8 +57,6 @@ itself against the deterministic alternative it replaced (ADR-0005).
 implementer who does not exist. One pipeline is a function; two are a function and a
 second function; three earn a protocol. Generic frameworks, plugin registries and
 configuration languages are forbidden until a concrete second case exists in the repo.
-*(Taken to be the "ponytail" rule — the ponytailed architect who designs for a
-generality nobody asked for. If you meant something else by it, fix this paragraph.)*
 
 **KISS.** The simplest thing that passes the golden set ships. Prefer a dict to a
 class, a function to a class, a file to a database, a list to an index — until
@@ -147,7 +143,6 @@ vendor/att-hackathon-task corpus submodule, read-only
   model names, thresholds and hop caps are configuration, not literals in code.
 - **Comments explain why.** The code says what. A comment restating the line is
   deleted on sight. Prefer a better name to a comment.
-- **Adding a dependency or switching language: ask first.** Still true.
 
 ## Testing rules
 
@@ -197,7 +192,12 @@ The repo must not drown in documentation. These rules are about keeping it small
 - **GROUND → PLAN → ACT → VERIFY.** Any claim about corpus structure comes from
   reading the corpus, not from the upstream README.
 - **Conventional Commits**: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`.
-  One logical change per commit. The body says *why*.
+  The body says *why*.
+- **One session of changes is one commit.** Commit at the end of a session, not at every
+  green test: a dozen commits for one conversation buries the changelog. Squash before
+  handing over, even when the intermediate commits were already pushed — take a
+  `backup/<session>` branch first, then `reset --soft <session base>` and
+  `push --force-with-lease`. Per-change history belongs in the session, not in `main`.
 - **Commits are the changelog, and they are short.** Subject ≤ 72 chars. Body: at most
   3 lines of plain fact — what changed and why. No ceremony, no restating the diff.
 - **A direction change is committed as a direction change**, in the same commit as the
@@ -228,14 +228,19 @@ narrowed test file, and let the commit gate decide.
 
 ## Commands
 
-Not yet implemented. These are the contracts the first app must satisfy; replace this
-section with the real, tested commands as each lands, and keep it current.
+These are the tested commands, run from the repository root.
 
 ```sh
-uv sync                                          # install (already done)
-docker compose -f ../../infra/neo4j/compose.yaml up -d   # store
-uv run python -m cli load ../../data/fixtures/claims-sample.jsonl
-uv run python -m cli serve                       # REST on :8000
-uv run python -m cli mcp                         # MCP over stdio
-uv run pytest -q                                 # 54 tests, no Neo4j, no model
+make up                     # neo4j + ollama + app in containers (project `etyt`)
+make ui                     # build the UI when stale, then serve page + API on :8000
+make extract                # deterministic claims -> data/local/claims-extracted.jsonl
+make index                  # chunk + embed the corpus for hybrid search
+make load                   # fixtures + extracted claims into the graph, span-gated
+make check                  # lint + tests (the commit gate)
+cd apps/context-service && uv run python -m cli extract --source adr:../some/adrs
+cd apps/context-service && uv run pytest -q   # 128 tests, no model, no network
 ```
+
+A second stack on the same host: `ETYT_PROJECT=etyt-b ETYT_APP_PORT=18000
+ETYT_NEO4J_HTTP_PORT=17474 ETYT_NEO4J_BOLT_PORT=17687 ETYT_OLLAMA_PORT=21435
+docker compose -p etyt-b -f infra/neo4j/compose.yaml up -d --wait`.

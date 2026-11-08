@@ -61,18 +61,42 @@ class EntityRef(BaseModel):
     key: str
 
 
+class Region(BaseModel):
+    """A rectangle in an image, in pixels from the top-left corner.
+
+    An image has no lines to cite, so a diagram claim points at where it was read. Every
+    leg of the span gate that works on text is replaced by one that works on geometry:
+    the rectangle must be inside the file's real dimensions and its digest must match.
+    """
+
+    x: int = Field(ge=0)
+    y: int = Field(ge=0)
+    w: int = Field(gt=0)
+    h: int = Field(gt=0)
+
+    def __str__(self) -> str:
+        return f"{self.x},{self.y},{self.w},{self.h}"
+
+
 class Span(BaseModel):
-    """A pointer, never stored prose: the text is resolved from (path, lines, hash)."""
+    """A pointer, never stored prose: the text is resolved from (path, lines, hash).
+
+    A region is present only for image sources; `start_line == end_line == 1` is then the
+    sentinel, because the record still has to say where in the file it looked.
+    """
 
     path: str
     start_line: int = Field(ge=1)
     end_line: int = Field(ge=1)
     content_hash: str
+    region: Region | None = None
 
     @model_validator(mode="after")
     def _ordered(self) -> Span:
         if self.end_line < self.start_line:
             raise ValueError("end_line before start_line")
+        if self.region is not None and (self.start_line, self.end_line) != (1, 1):
+            raise ValueError("a region span cites the whole file: start_line and end_line must be 1")
         return self
 
 
@@ -97,6 +121,8 @@ class ClaimRecord(BaseModel):
     doc_status: DocStatus | None = None
     modality_capped_from: Modality | None = None
     authority: float = Field(ge=0.0, le=1.0, default=0.45)
+    # Verification input for the span gate; the loader stores the pointer, never this text.
+    excerpt: str | None = None
 
     @property
     def triple(self) -> tuple[str, str, str]:
@@ -110,12 +136,9 @@ class ClaimRecord(BaseModel):
         import hashlib
 
         span = self.evidence[0]
-        raw = "|".join(
-            [
-                *self.triple,
-                self.polarity.value,
-                f"{span.path}:{span.start_line}-{span.end_line}",
-                self.extractor_version,
-            ]
-        )
+        where = f"{span.path}:{span.start_line}-{span.end_line}"
+        if span.region is not None:
+            # Two facts read from two places in one image are two claims, not one.
+            where = f"{where}@{span.region}"
+        raw = "|".join([*self.triple, self.polarity.value, where, self.extractor_version])
         return "c_" + hashlib.sha256(raw.encode()).hexdigest()[:16]
